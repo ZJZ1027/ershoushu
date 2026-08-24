@@ -1,0 +1,1041 @@
+// ============================================================================
+// 设计 Token（bm- = base master，全站语义变量统一前缀）
+//
+// 目的：把全站散落在各组件里的硬编码色值/圆角/阴影/间距收口成一套语义变量，
+// 既统一视觉、又便于整体调参。所有色值优先挂到 Arco 既有 CSS 变量上
+// （`--color-text-*` / `--arcoblue-*` / `--green-6` …），从而：
+//   1) 自动跟随 Arco 的明暗主题翻转，省去各页面再写一套 dark 覆盖；
+//   2) 给出 hex 兜底（= Arco 调色板原值），即使某变量缺失也不致塌成黑色。
+//
+// 用法：组件里直接 `color: var(--bm-text-2);` / `background: var(--bm-brand-bg);`
+// 无需 @import（这是全局自定义属性，已在 index.scss 注册）。
+//
+// 作用域必须是 body 而非 :root：Arco 把 `--color-*` / `--arcoblue-*` 等变量
+// 及其暗色覆盖（body[arco-theme='dark']）都定义在 body 上，:root(html) 上为空。
+// 若把 token 挂在 :root，`var(--color-bg-1)` 会在 :root 处就解析成兜底浅色并
+// 向下继承，拿不到 body 的暗色覆盖 → 暗色模式失效。挂在 body 才会逐主题解析。
+//
+// 点缀色纪律：除品牌色外，只允许 success / warning / danger / info 四个语义色，
+// 不再各页面自创蓝橙绿紫；业务图标统一从「品牌 / 语义 / 中性」三类里取。
+// ============================================================================
+
+@use 'sass:list';
+@use 'sass:map';
+
+// 品牌色板注入（明色模式）：1 浅 → 10 深，直接按位写入。
+@mixin bm-brand-palette($palette) {
+  @each $i, $c in $palette {
+    --arcoblue-#{$i}: #{list.nth($c, 1)}, #{list.nth($c, 2)}, #{list.nth($c, 3)};
+    --primary-#{$i}: #{list.nth($c, 1)}, #{list.nth($c, 2)}, #{list.nth($c, 3)};
+  }
+}
+
+// 品牌色板注入（暗色模式）：按 Arco 暗色规则「色板反转」（1↔10、2↔9…），
+// 让 1 号位（各种 *-bg 浅底）在暗色下自动变成深色、6 号主色亮一档保证对比度。
+// ⚠ 若像明色一样原样灌入，--bm-brand-bg 等会在暗色下变成刺眼亮块（历史教训）。
+@mixin bm-brand-palette-dark($palette) {
+  @each $i, $c in $palette {
+    $m: map.get($palette, 11 - $i);
+    --arcoblue-#{$i}: #{list.nth($m, 1)}, #{list.nth($m, 2)}, #{list.nth($m, 3)};
+    --primary-#{$i}: #{list.nth($m, 1)}, #{list.nth($m, 2)}, #{list.nth($m, 3)};
+  }
+}
+
+body {
+  /* ===== 字体 =====
+     Outfit Variable 给拉丁字母/数字增加性格与辨识度（自托管打包，见 main.ts）；
+     中文按系统字体回退，避免引入大体积中文 web 字体。
+     --bm-font-display：大标题 / 区块标题；--bm-font-num：KPI 等关键数字（配合 tabular-nums）。 */
+  --bm-font-display:
+    'Outfit Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --bm-font-num:
+    'Outfit Variable', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
+
+  /* ===== 字号刻度 =====
+     背景：全站曾散落 32 种字号（含 12.5 / 13.5 / 11.5 这类随手微调出来的半像素），
+     同一语义角色在不同页面写成三个值，翻页时节奏对不上。这里收成 8 级刻度，
+     新代码一律引用语义别名，不再写裸 px。
+
+     刻度：11 / 12 / 13 / 14 / 16 / 18 / 20 / 24
+     ⚠ 图标的 font-size 是「尺寸」不是「字号」，请用 --bm-icon-* 一组，别混用。 */
+  --bm-fs-2xs: 11px; // 角标、计数、最弱注解
+  --bm-fs-xs: 12px; // 说明、时间、表头
+  --bm-fs-sm: 13px; // 正文、表格单元、表单
+  --bm-fs-md: 14px; // 区块标题、强调正文
+  --bm-fs-lg: 16px; // 卡片标题
+  --bm-fs-xl: 18px; // 页面/详情主标题
+  --bm-fs-2xl: 20px; // KPI 数字、Hero 标题
+  --bm-fs-3xl: 24px; // 大号展示数字
+
+  /* 语义别名：组件里优先用这一组，读起来是「角色」而不是「尺寸」 */
+  --bm-fs-badge: var(--bm-fs-2xs);
+  --bm-fs-meta: var(--bm-fs-xs);
+  --bm-fs-body: var(--bm-fs-sm);
+  --bm-fs-section: var(--bm-fs-md);
+  --bm-fs-card-title: var(--bm-fs-lg);
+  --bm-fs-page-title: var(--bm-fs-xl);
+  --bm-fs-kpi: var(--bm-fs-2xl);
+
+  /* 行高：正文 1.6 保证中文可读，标题 1.35 收紧，数字 1 便于精确对齐 */
+  --bm-lh-tight: 1.35;
+  --bm-lh-body: 1.6;
+  --bm-lh-num: 1;
+
+  /* 图标尺寸（与字号刻度分开，避免「调字号顺带把图标改大」） */
+  --bm-icon-sm: 14px;
+  --bm-icon: 16px;
+  --bm-icon-lg: 20px;
+
+  /* ===== 字距刻度 =====
+     中文不需要（也不该）加正字距，方块字本身已有均匀的字面间距，撑开只会散；
+     真正需要调的是两头：
+     - 大号中文标题（≥20px）要略微收紧，系统中文字体在大号下字面显松，-0.2 会更「立」；
+     - 全大写拉丁小字（品牌副名、栏目标签）必须撑开，不然字母会糊成一团。
+     所以刻度只有「展示 / 收紧 / 正常 / 撑开 / 大写撑开」五档，不做线性阶。
+     字距是**光学**量：同一档字距在 42px 和 20px 上观感不同，字号越大要越紧，故拆成两档收紧值。 */
+  --bm-track-display: -0.6px; // 展示级标题（32px+，如登录页主标题）
+  --bm-track-tight: -0.2px; // 大号中文标题（20~24px）
+  --bm-track: 0; // 正文（中文默认不动）
+  --bm-track-wide: 0.3px; // 小号拉丁 / 数字并排
+  --bm-track-caps: 1.4px; // 全大写拉丁
+
+  /* ===== 动效刻度 =====
+     背景：全站曾散落 10 种过渡时长（0.15 / 0.18 / 0.2 / 0.25 / 0.26 / 0.28 / 0.3 / 0.35 /
+     0.4 / 0.5s，共 114 处），同一类交互在不同页面快慢不一；更要紧的是 --bm-ease 此前只在
+     visual / linear 两套主题里定义过 —— 商务蓝下所有 var(--bm-ease) 都取不到值，
+     悄悄退化成浏览器默认 ease。这里把「动多久 / 用哪条曲线」收成四档并提到基底，全主题共享。
+
+     选档规则（新代码按角色选，不要再写裸秒数）：
+     - fast   90ms：颜色 / 透明度 / 图标状态这类即时反馈，慢了显得迟钝
+     - base  180ms：hover 上浮、边框、阴影、按钮 —— 默认档，绝大多数交互用它
+     - slow  260ms：面板 / 卡片 / 抽屉内容的位移与尺寸变化
+     - enter 420ms：首屏与列表入场（配合梯次延迟 40ms/项，上限 16 项）
+     曲线：进场与常规用 out（起步快、收尾稳）；退场用 in；强调（弹出 / 成功反馈）用 spring 轻微过冲。
+     ⚠ 只动 transform / opacity / color / shadow；不要过渡 width / height / top 这类触发重排的属性。 */
+  --bm-dur-fast: 90ms;
+  --bm-dur: 180ms;
+  --bm-dur-slow: 260ms;
+  --bm-dur-enter: 420ms;
+  --bm-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --bm-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --bm-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --bm-ease: var(--bm-ease-out); // 既有用法的别名，勿删
+
+  /* ===== 品牌主色 ===== */
+  --bm-brand: rgb(var(--arcoblue-6, 22, 93, 255));
+  --bm-brand-hover: rgb(var(--arcoblue-5, 77, 138, 255));
+  --bm-brand-active: rgb(var(--arcoblue-7, 14, 66, 210));
+  --bm-brand-bg: rgb(var(--arcoblue-1, 232, 243, 255));
+
+  /* ===== 语义色（点缀仅限这四类 + 品牌） ===== */
+  --bm-success: rgb(var(--green-6, 0, 180, 42));
+  --bm-success-bg: rgb(var(--green-1, 232, 255, 234));
+  --bm-warning: rgb(var(--orange-6, 255, 125, 0));
+  --bm-warning-bg: rgb(var(--orange-1, 255, 247, 232));
+  --bm-danger: rgb(var(--red-6, 245, 63, 63));
+  --bm-danger-bg: rgb(var(--red-1, 255, 236, 232));
+  --bm-info: rgb(var(--arcoblue-6, 22, 93, 255));
+  --bm-info-bg: rgb(var(--arcoblue-1, 232, 243, 255));
+
+  /* 语义色的「文字档」。上面那组 -6 是给圆点 / 描边 / 图标 / 进度条用的饱和色，
+     直接拿来当**文字**压在自家 -bg 浅底上对比度很低（实测白底徽章：橙 2.41:1、
+     绿 2.63:1、红 3.25:1，均低于 AA 的 4.5:1）。凡是「浅底 + 彩字」的徽章 / 数字 /
+     提示，用这一组压深两档的变体；纯色点、边框、图标仍用上面的 -6。
+     暗色下 Arco 会翻转色板（-8 变亮色），方向自动正确。 */
+  --bm-success-text: rgb(var(--green-8, 0, 128, 38));
+  --bm-warning-text: rgb(var(--orange-8, 166, 69, 0));
+  --bm-danger-text: rgb(var(--red-7, 203, 39, 45));
+  --bm-info-text: rgb(var(--arcoblue-7, 14, 66, 210));
+  /* 品牌色的「文字档」。--bm-brand 是 -6 档：商务蓝白底 5.19 尚可，但换到视觉体验版
+     （靛蓝）就掉到 4.47，够不上小字的 4.5。凡是「品牌色文字」（数字、权重 chip、
+     链接式文案）用这一档，-6 留给圆点 / 描边 / 进度条 / 实心底。 */
+  --bm-brand-text: rgb(var(--arcoblue-7, 14, 66, 210));
+
+  /* 「实心彩底 + 白字」专用填充档。上面那组 -6 拿来当底、压 11~13px 白字全部不达标
+     （实测品牌 5.19~3.14、橙 2.57、绿 2.78、红 3.71，小字要 4.5）。
+     这一组是「白字站得住」的那一档，实测：品牌 7.7/6.29 · 绿 5.1 · 橙 6.05 · 红 5.43。
+     暗色下 Arco 把色阶整条翻转（序号越大越亮），同一句 -7 会变成浅色、白字反而更糟，
+     所以暗色必须换到小序号那端另写一组（见文件末暗色块）。
+     用法：底色用 --bm-*-solid，文字保持 #fff；淡底配彩字仍用上面的 --bm-*-text。 */
+  --bm-brand-solid: rgb(var(--arcoblue-7, 14, 66, 210));
+  --bm-success-solid: rgb(var(--green-8, 0, 128, 38));
+  --bm-warning-solid: rgb(var(--orange-8, 166, 69, 0));
+  --bm-danger-solid: rgb(var(--red-7, 203, 39, 45));
+
+  /* 上面那档的「渐变版」：给「渐变胶囊 + 白字」用（报告目录激活项、头像圆牌）。
+     这类地方原先手写 --bm-brand → --bm-brand-hover，两端都是 -6/-5 档，
+     白字实测只有 3.08~4.45，四套主题全部不达标。两端都挪到实心档那一侧
+     （亮 -7→-8 / 暗 -4→-3），白字实测 6.29~10.95。
+     纯装饰的渐变（渐变文字 / 强调条 / 进度条）不受此限，继续用 --bm-grad。 */
+  --bm-brand-grad: linear-gradient(
+    135deg,
+    rgb(var(--arcoblue-7, 14, 66, 210)) 0%,
+    rgb(var(--arcoblue-8, 7, 44, 166)) 100%
+  );
+
+  /* ===== 中性文字（挂 Arco，随暗色自动翻转） ===== */
+  --bm-text-1: var(--color-text-1, #1d2129); // 主标题/数字
+  --bm-text-2: var(--color-text-2, #4e5969); // 正文/标签
+  // 次要/说明。不再吃 Arco 的 --color-text-3(#86909c) —— 它在白底只有 3.24:1，
+  // 够不上 WCAG AA 对正文号字的 4.5:1。而这一档承载的全是真内容（公告摘要、抓取
+  // 时间、卡片眉标、侧栏分组名…），实测扫下来是全站最大一片「看着灰、读着累」的区域。
+  // 取值不直接用灰阶档位：gray-7(#6b7785) 在白卡上 4.62 刚过线，但很多这一档的文字其实
+  // 落在页面底(#f7f8fa / #fbfbfc)而不是白卡上，那里只有 4.29，仍然差一点；
+  // 再深一档 gray-8(#4e5969) 又与正文档 --bm-text-2 撞成同色，层级会塌。
+  // 所以取两档之间。实测：白卡 5.65 / 页面底 5.13 / 灰色填充块(fill-3) 4.56，
+  // 三种落脚面都过 4.5，与正文档 --bm-text-2(#4e5969) 仍有可见的轻重差。
+  --bm-text-3: #5f6874; // 次要/说明
+  --bm-text-4: var(--color-text-4, #c9cdd4); // 占位/最弱（仅装饰，勿承载信息）
+
+  /* ===== 描边 / 填充 / 背景 ===== */
+  --bm-border: var(--color-border-2, #e5e6eb);
+  --bm-border-light: var(--color-border-1, #f2f3f5);
+  --bm-fill: var(--color-fill-2, #f2f3f5);
+  --bm-fill-light: var(--color-fill-1, #f7f8fa);
+  --bm-bg-page: var(--color-bg-1, #f5f6fa); // 页面底
+  --bm-bg-card: var(--color-bg-2, #ffffff); // 卡片底
+
+  /* ===== 圆角 ===== */
+  --bm-radius-sm: 6px;
+  --bm-radius: 10px;
+  --bm-radius-lg: 14px;
+
+  /* ===== 阴影（对齐 Arco 四级层级：卡片1 / hover2 / 弹层3 / 模态4） =====
+     双层柔和阴影：近距 1px 勾边 + 远距大模糊环境光，给元素「漂浮」的精致质感。
+     层级越高、模糊越大、越沉，符合 Arco「高层级元素阴影更重」。 */
+  --bm-shadow-card: 0 1px 3px rgba(29, 33, 41, 0.04), 0 6px 16px -8px rgba(29, 33, 41, 0.08);
+  --bm-shadow-hover:
+    0 14px 30px -12px rgba(29, 33, 41, 0.18), 0 6px 14px -8px rgba(29, 33, 41, 0.1);
+  /* 三级：下拉 / 气泡 / 选择器等浮层 */
+  --bm-shadow-popup: 0 4px 10px rgba(29, 33, 41, 0.08), 0 8px 24px -6px rgba(29, 33, 41, 0.12);
+  /* 四级：模态框 / 抽屉等最上层容器 */
+  --bm-shadow-modal: 0 8px 20px rgba(29, 33, 41, 0.1), 0 16px 48px -8px rgba(29, 33, 41, 0.18);
+
+  /* ===== 间距刻度 =====
+     纯 4/8 栅格在中文密集界面里太粗，实测 6px / 10px 是「图标+文字」「chip 内边距」
+     的高频刚需，所以取 2 的倍数梯：2 / 4 / 6 / 8 / 10 / 12 / 16 / 20 / 24 / 32，
+     把 1、3、5、7、9、11、13、14、15、18、28、36 这些漂移值收掉。 */
+  --bm-gap-2xs: 2px;
+  --bm-gap-xs: 4px;
+  --bm-gap-tight: 6px;
+  --bm-gap-sm: 8px;
+  --bm-gap-cozy: 10px;
+  --bm-gap: 12px;
+  --bm-gap-lg: 16px;
+  --bm-gap-xl: 20px;
+  --bm-gap-2xl: 24px;
+  --bm-gap-3xl: 32px;
+
+  /* ===== 容器内边距：卡片/区块只允许这三档，避免每张卡各写各的 ===== */
+  --bm-pad-sm: 12px 16px; // 紧凑条、内嵌块
+  --bm-pad: 16px 20px; // 默认卡片
+  --bm-pad-lg: 20px 24px; // 主卡 / 详情头
+}
+
+// 暗色下页面底/卡片底已由 Arco 的 --color-bg-* 自动给出，无需重复覆盖。
+
+// ============================================================================
+// Linear 借鉴主题（body[data-brand='linear'] 时启用；顶栏开关切换 + localStorage 持久化）
+//
+// 借鉴点：
+//   1) 品牌色换成 Linear 标志性靛紫 #5E6AD2（覆盖裸值色板 --arcoblue-* / --primary-*，
+//      --bm-brand 与所有 Arco 原生主色组件经引用链自动跟随，一处生效）；
+//   2) 质感更克制：圆角收敛、用 1px 低对比边框替代重阴影（阴影压到极轻）、页面底近白。
+// 明暗两套都覆盖色板（暗色块特异度更高，压过 Arco 的 body[arco-theme='dark'] 蓝色板）。
+// ============================================================================
+$bm-linear-palette: (
+  1: (
+    238,
+    240,
+    251
+  ),
+  2: (
+    223,
+    226,
+    247
+  ),
+  3: (
+    196,
+    201,
+    240
+  ),
+  4: (
+    166,
+    173,
+    232
+  ),
+  5: (
+    129,
+    137,
+    222
+  ),
+  6: (
+    94,
+    106,
+    210
+  ),
+  7: (
+    75,
+    84,
+    176
+  ),
+  8: (
+    57,
+    65,
+    140
+  ),
+  9: (
+    41,
+    47,
+    105
+  ),
+  10: (
+    27,
+    31,
+    71
+  )
+);
+
+// ============================================================================
+// 落日琥珀金主题（body[data-brand='amber']；顶栏第三个可选风格）
+//
+// 暖金主色 #F59E0B（6 号位）——把裸值色板 --arcoblue-* / --primary-* 换成一条金色梯，
+// --bm-brand 及所有 Arco 原生主色组件经引用链自动跟随，一处生效。配合暖纸页面底 +
+// 暖棕阴影，营造「落日 / 高级感」；圆角沿用默认。
+// ============================================================================
+$bm-amber-palette: (
+  1: (
+    255,
+    248,
+    230
+  ),
+  2: (
+    255,
+    238,
+    199
+  ),
+  3: (
+    253,
+    221,
+    150
+  ),
+  4: (
+    251,
+    201,
+    96
+  ),
+  5: (
+    248,
+    178,
+    43
+  ),
+  6: (
+    245,
+    158,
+    11
+  ),
+  7: (
+    202,
+    124,
+    5
+  ),
+  8: (
+    158,
+    94,
+    2
+  ),
+  9: (
+    115,
+    66,
+    1
+  ),
+  10: (
+    74,
+    42,
+    0
+  )
+);
+
+// ============================================================================
+// 科技青主题（body[data-brand='teal']；顶栏第四个可选风格）
+//
+// 主色 #0D9488（6 号位）——夹在蓝与绿之间的冷青，和商务蓝/靛紫/琥珀都拉开距离，且不撞
+// 成功绿/警告橙/危险红/信息蓝任何语义色，无需错开。配浅薄荷页面底 + 冷青阴影。
+// ============================================================================
+$bm-teal-palette: (
+  1: (
+    230,
+    250,
+    248
+  ),
+  2: (
+    197,
+    242,
+    237
+  ),
+  3: (
+    148,
+    227,
+    219
+  ),
+  4: (
+    92,
+    206,
+    195
+  ),
+  5: (
+    45,
+    181,
+    168
+  ),
+  6: (
+    13,
+    148,
+    136
+  ),
+  7: (
+    8,
+    120,
+    111
+  ),
+  8: (
+    5,
+    94,
+    87
+  ),
+  9: (
+    3,
+    68,
+    63
+  ),
+  10: (
+    1,
+    43,
+    40
+  )
+);
+
+// ============================================================================
+// 玫瑰品红主题（body[data-brand='rose']；顶栏第五个可选风格）
+//
+// 主色 #EB2F96（6 号位）——偏品红/洋红（色相 ~328°），与危险红（~0°）拉开、与靛紫也不同，
+// 一抹活力暖色。配浅粉页面底 + 玫红阴影；玫红与危险红仍有一定距离，不额外错色。
+// ============================================================================
+$bm-rose-palette: (
+  1: (
+    255,
+    232,
+    243
+  ),
+  2: (
+    255,
+    209,
+    230
+  ),
+  3: (
+    253,
+    168,
+    206
+  ),
+  4: (
+    248,
+    122,
+    179
+  ),
+  5: (
+    242,
+    84,
+    158
+  ),
+  6: (
+    235,
+    47,
+    150
+  ),
+  7: (
+    192,
+    28,
+    121
+  ),
+  8: (
+    150,
+    17,
+    94
+  ),
+  9: (
+    108,
+    9,
+    67
+  ),
+  10: (
+    68,
+    4,
+    41
+  )
+);
+
+// ============================================================================
+// 石墨灰蓝主题（body[data-brand='slate']；顶栏第六个可选风格）
+//
+// 主色 #64748B（6 号位，slate-500）——低饱和「高级灰 / 极简」，不是又一个鲜艳色相而是
+// 一整套克制的中性灰蓝。主色刻意选中等明度，保证在白底与近黑底上都可读（选中菜单文字/
+// 链接走 primary-6，深色下也不至于糊）。与任何语义色都不撞。
+// ============================================================================
+$bm-slate-palette: (
+  1: (
+    248,
+    250,
+    252
+  ),
+  2: (
+    241,
+    245,
+    249
+  ),
+  3: (
+    226,
+    232,
+    240
+  ),
+  4: (
+    148,
+    163,
+    184
+  ),
+  5: (
+    118,
+    132,
+    152
+  ),
+  6: (
+    100,
+    116,
+    139
+  ),
+  7: (
+    71,
+    85,
+    105
+  ),
+  8: (
+    51,
+    65,
+    85
+  ),
+  9: (
+    30,
+    41,
+    59
+  ),
+  10: (
+    15,
+    23,
+    42
+  )
+);
+
+// ============================================================================
+// 葡萄紫主题（body[data-brand='violet']；顶栏第七个可选风格）
+//
+// 主色 #7C3AED（6 号位）——高饱和真紫，落在 Linear 靛紫（偏蓝的低饱和长春花）与
+// 玫瑰品红（偏粉）之间但明显更「紫」，明暗两态都够跳。与语义色不撞。
+// ============================================================================
+$bm-violet-palette: (
+  1: (
+    243,
+    236,
+    254
+  ),
+  2: (
+    232,
+    218,
+    252
+  ),
+  3: (
+    209,
+    184,
+    249
+  ),
+  4: (
+    176,
+    138,
+    245
+  ),
+  5: (
+    150,
+    100,
+    242
+  ),
+  6: (
+    124,
+    58,
+    237
+  ),
+  7: (
+    100,
+    40,
+    200
+  ),
+  8: (
+    78,
+    31,
+    158
+  ),
+  9: (
+    56,
+    22,
+    112
+  ),
+  10: (
+    34,
+    13,
+    68
+  )
+);
+
+body[data-brand='linear'] {
+  @include bm-brand-palette($bm-linear-palette);
+
+  /* 圆角收敛（Linear 卡片≈8px） */
+  --bm-radius-sm: 6px;
+  --bm-radius: 8px;
+  --bm-radius-lg: 12px;
+
+  /* 阴影压到极轻——主要靠 1px 边框勾勒（Linear 式扁平） */
+  --bm-shadow-card: 0 1px 2px rgba(16, 17, 26, 0.05);
+  --bm-shadow-hover: 0 2px 8px -2px rgba(16, 17, 26, 0.12);
+  --bm-shadow-popup: 0 4px 16px -4px rgba(16, 17, 26, 0.14);
+  --bm-shadow-modal: 0 12px 40px -8px rgba(16, 17, 26, 0.24);
+
+  /* 更中性、略清晰的低对比边框 */
+  --bm-border: #e3e5e9;
+  --bm-border-light: #ecedf0;
+
+  /* 页面底近白、去掉偏蓝的灰 */
+  --bm-bg-page: #fbfbfc;
+  --app-content-bg-color: #fbfbfc;
+}
+
+body[data-brand='linear'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-linear-palette);
+
+  /* 暗色 Linear：近黑画布 #08090a + 四级 surface 阶梯（覆盖 Arco 暗色底色，
+     让全站暗色都变成 Linear 那种深沉、内敛的「午夜仪表盘」）。 */
+  --color-bg-1: #08090a; // 页面最底
+  --color-bg-2: #0f1011; // 卡片 / 导航栏 / 侧栏
+  --color-bg-3: #141517; // 抬起面（下拉/悬浮项底）
+  --color-bg-4: #1b1c1f; // 更高层
+  --color-bg-5: #232428; // 最高层
+
+  --bm-border: #26282d;
+  --bm-border-light: #1e2023;
+  --bm-bg-page: #08090a;
+  --bm-bg-card: #0f1011;
+  --app-content-bg-color: #08090a;
+  --bm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --bm-shadow-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.55);
+}
+
+// ============================================================================
+// 落日琥珀金主题 body 块（明 / 暗）
+// ============================================================================
+body[data-brand='amber'] {
+  @include bm-brand-palette($bm-amber-palette);
+
+  /* 暖纸页面底 + 暖化的填充/边框，配暖棕阴影，形成落日高级感；圆角沿用默认。 */
+  --bm-border: #ece6da;
+  --bm-border-light: #f4efe6;
+  --bm-fill: #f4efe4;
+  --bm-fill-light: #faf6ee;
+  --bm-bg-page: #faf7f0;
+  --bm-bg-card: #ffffff;
+  --app-content-bg-color: #faf7f0;
+
+  --bm-shadow-card: 0 1px 3px rgba(120, 82, 20, 0.05), 0 6px 16px -8px rgba(120, 82, 20, 0.12);
+  --bm-shadow-hover:
+    0 14px 30px -12px rgba(120, 82, 20, 0.2), 0 6px 14px -8px rgba(120, 82, 20, 0.12);
+
+  /* 品牌是金 (#F59E0B, ~38°)，把「警告」语义色推到更橙红 (~15°) 与之错开，避免撞色。 */
+  --bm-warning: rgb(240, 94, 32);
+  --bm-warning-bg: rgb(255, 240, 232);
+
+  /* 无障碍档整体下移一档：金梯比蓝梯亮，别的品牌 -7 是「白字站得住 / 彩字读得清」那一档，
+     金色 -7 (202,124,5) 实测只有 3.28，得走 -8 (158,94,2)=5.18。八套品牌里只有金需要这个偏移
+     （实测另外 7 套 -7 都在 5.35~7.84），所以不动通用定义、只在这里让位。 */
+  --bm-brand-text: rgb(var(--arcoblue-8));
+  --bm-brand-solid: rgb(var(--arcoblue-8));
+  --bm-brand-grad: linear-gradient(
+    135deg,
+    rgb(var(--arcoblue-8)) 0%,
+    rgb(var(--arcoblue-9)) 100%
+  );
+}
+
+body[data-brand='amber'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-amber-palette);
+
+  /* 暖色午夜画布：覆盖 Arco 暗色底色，让全站暗色都带一层暖棕、与金主色呼应（落日夜）。
+     ⚠ 必须在此重置明色块里设过的所有 --bm-* 表面/边框/填充/阴影，否则它们会「泄漏」到暗色
+     （表现为暗色下卡片仍是白纸底）。 */
+  --color-bg-1: #17130d; // 页面最底
+  --color-bg-2: #1e1912; // 卡片 / 导航栏 / 侧栏
+  --color-bg-3: #251f16; // 抬起面（下拉 / 悬浮项底）
+  --color-bg-4: #2d2619; // 更高层
+  --color-bg-5: #372f20; // 最高层
+
+  --bm-border: #39301f;
+  --bm-border-light: #2a231a;
+  --bm-fill: #251f16;
+  --bm-fill-light: #1e1912;
+  --bm-bg-page: #17130d;
+  --bm-bg-card: #1e1912;
+  --app-content-bg-color: #17130d;
+  --bm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bm-shadow-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.62);
+
+  /* warning 错开金色（暗色略提亮） */
+  --bm-warning: rgb(247, 114, 52);
+  --bm-warning-bg: rgba(247, 114, 52, 0.16);
+
+  /* 同上下移一档（暗色色阶已反转，实心档从 -4 挪到 -3）。
+     --bm-brand-text 要显式写回 -7：明色块那句 -8 会顺着 body[data-brand='amber'] 的
+     高特异度泄漏进暗色，而暗色下 -7 (251,201,96) 压深卡底实测 12，本就够用。 */
+  --bm-brand-text: rgb(var(--arcoblue-7));
+  --bm-brand-solid: rgb(var(--arcoblue-3));
+  --bm-brand-grad: linear-gradient(
+    135deg,
+    rgb(var(--arcoblue-3)) 0%,
+    rgb(var(--arcoblue-2)) 100%
+  );
+}
+
+// ============================================================================
+// 科技青主题 body 块（明 / 暗）
+// ============================================================================
+body[data-brand='teal'] {
+  @include bm-brand-palette($bm-teal-palette);
+
+  /* 浅薄荷页面底 + 冷青化的填充/边框，配冷青阴影；圆角沿用默认。青与所有语义色都不撞，
+     无需像琥珀那样错开 warning。 */
+  --bm-border: #e0ecea;
+  --bm-border-light: #eef5f4;
+  --bm-fill: #eaf3f1;
+  --bm-fill-light: #f4f9f8;
+  --bm-bg-page: #f4f8f7;
+  --bm-bg-card: #ffffff;
+  --app-content-bg-color: #f4f8f7;
+
+  --bm-shadow-card: 0 1px 3px rgba(6, 78, 72, 0.05), 0 6px 16px -8px rgba(6, 78, 72, 0.12);
+  --bm-shadow-hover: 0 14px 30px -12px rgba(6, 78, 72, 0.2), 0 6px 14px -8px rgba(6, 78, 72, 0.12);
+}
+
+body[data-brand='teal'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-teal-palette);
+
+  /* 深海午夜画布：覆盖 Arco 暗色底色，全站暗色带一层冷青墨绿、与青主色呼应。
+     ⚠ 同样必须重置明色块设过的所有 --bm-* 表面/边框/填充/阴影，避免泄漏到暗色。 */
+  --color-bg-1: #0a1413;
+  --color-bg-2: #0f1b1a;
+  --color-bg-3: #142322;
+  --color-bg-4: #1a2b29;
+  --color-bg-5: #223533;
+
+  --bm-border: #223734;
+  --bm-border-light: #172624;
+  --bm-fill: #142322;
+  --bm-fill-light: #0f1b1a;
+  --bm-bg-page: #0a1413;
+  --bm-bg-card: #0f1b1a;
+  --app-content-bg-color: #0a1413;
+  --bm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bm-shadow-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+}
+
+// ============================================================================
+// 玫瑰品红主题 body 块（明 / 暗）
+// ============================================================================
+body[data-brand='rose'] {
+  @include bm-brand-palette($bm-rose-palette);
+
+  /* 浅粉页面底 + 玫红化的填充/边框，配玫红阴影；圆角沿用默认。 */
+  --bm-border: #f0e2e9;
+  --bm-border-light: #f8eef3;
+  --bm-fill: #f6e8ef;
+  --bm-fill-light: #fdf5f9;
+  --bm-bg-page: #fdf6fa;
+  --bm-bg-card: #ffffff;
+  --app-content-bg-color: #fdf6fa;
+
+  --bm-shadow-card: 0 1px 3px rgba(120, 20, 70, 0.05), 0 6px 16px -8px rgba(120, 20, 70, 0.12);
+  --bm-shadow-hover:
+    0 14px 30px -12px rgba(120, 20, 70, 0.2), 0 6px 14px -8px rgba(120, 20, 70, 0.12);
+}
+
+body[data-brand='rose'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-rose-palette);
+
+  /* 玫瑰午夜画布：覆盖 Arco 暗色底色，全站暗色带一层深酒红梅子调、与玫红主色呼应。
+     ⚠ 同样必须重置明色块设过的所有 --bm-* 表面/边框/填充/阴影，避免泄漏到暗色。 */
+  --color-bg-1: #150a10;
+  --color-bg-2: #1d1017;
+  --color-bg-3: #24151d;
+  --color-bg-4: #2d1b25;
+  --color-bg-5: #38232f;
+
+  --bm-border: #3a2531;
+  --bm-border-light: #2a1a23;
+  --bm-fill: #24151d;
+  --bm-fill-light: #1d1017;
+  --bm-bg-page: #150a10;
+  --bm-bg-card: #1d1017;
+  --app-content-bg-color: #150a10;
+  --bm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bm-shadow-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+}
+
+// ============================================================================
+// 石墨灰蓝主题 body 块（明 / 暗）
+// ============================================================================
+body[data-brand='slate'] {
+  @include bm-brand-palette($bm-slate-palette);
+
+  /* 冷中性页面底 + 灰蓝化的填充/边框，配中性阴影；圆角沿用默认。中性色不撞任何语义色。 */
+  --bm-border: #e3e8ef;
+  --bm-border-light: #eef1f5;
+  --bm-fill: #eceff3;
+  --bm-fill-light: #f5f7fa;
+  --bm-bg-page: #f3f5f8;
+  --bm-bg-card: #ffffff;
+  --app-content-bg-color: #f3f5f8;
+
+  --bm-shadow-card: 0 1px 3px rgba(30, 41, 59, 0.05), 0 6px 16px -8px rgba(30, 41, 59, 0.12);
+  --bm-shadow-hover:
+    0 14px 30px -12px rgba(30, 41, 59, 0.2), 0 6px 14px -8px rgba(30, 41, 59, 0.12);
+}
+
+body[data-brand='slate'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-slate-palette);
+
+  /* 石墨午夜画布：覆盖 Arco 暗色底色，全站暗色带一层冷灰蓝墨调、克制沉稳。
+     ⚠ 同样必须重置明色块设过的所有 --bm-* 表面/边框/填充/阴影，避免泄漏到暗色。 */
+  --color-bg-1: #0b0f16;
+  --color-bg-2: #111722;
+  --color-bg-3: #171f2c;
+  --color-bg-4: #1e2736;
+  --color-bg-5: #273143;
+
+  --bm-border: #283041;
+  --bm-border-light: #1a2130;
+  --bm-fill: #171f2c;
+  --bm-fill-light: #111722;
+  --bm-bg-page: #0b0f16;
+  --bm-bg-card: #111722;
+  --app-content-bg-color: #0b0f16;
+  --bm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bm-shadow-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+}
+
+// ============================================================================
+// 葡萄紫主题 body 块（明 / 暗）
+// ============================================================================
+body[data-brand='violet'] {
+  @include bm-brand-palette($bm-violet-palette);
+
+  /* 淡薰衣草页面底 + 紫化填充/边框，配紫调阴影；圆角沿用默认。 */
+  --bm-border: #e9e2f5;
+  --bm-border-light: #f2ecfa;
+  --bm-fill: #f0e9fa;
+  --bm-fill-light: #f8f4fd;
+  --bm-bg-page: #f8f5fe;
+  --bm-bg-card: #ffffff;
+  --app-content-bg-color: #f8f5fe;
+
+  --bm-shadow-card: 0 1px 3px rgba(74, 30, 140, 0.05), 0 6px 16px -8px rgba(74, 30, 140, 0.12);
+  --bm-shadow-hover:
+    0 14px 30px -12px rgba(74, 30, 140, 0.2), 0 6px 14px -8px rgba(74, 30, 140, 0.12);
+}
+
+body[data-brand='violet'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-violet-palette);
+
+  /* 紫晶午夜画布：覆盖 Arco 暗色底色，全站暗色带一层紫黑调。
+     ⚠ 同样必须重置明色块设过的所有 --bm-* 表面/边框/填充/阴影，避免泄漏到暗色。 */
+  --color-bg-1: #0d0916;
+  --color-bg-2: #140f20;
+  --color-bg-3: #1a132b;
+  --color-bg-4: #221936;
+  --color-bg-5: #2c2145;
+
+  --bm-border: #2a2140;
+  --bm-border-light: #1a1428;
+  --bm-fill: #1a132b;
+  --bm-fill-light: #140f20;
+  --bm-bg-page: #0d0916;
+  --bm-bg-card: #140f20;
+  --app-content-bg-color: #0d0916;
+  --bm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bm-shadow-hover: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+}
+
+// ============================================================================
+// 视觉体验版主题（body[data-brand='visual']；顶栏第八个可选风格）
+//
+// 与前 7 套「克制/专业」路线不同，这套是给客户看的「漂亮/惊艳」版：
+//   靛蓝主色 #6366F1 + 靛→紫→青渐变贯穿全站；圆角更大更饱满、投影更厚且带品牌色，
+//   卡片「漂浮」；配合 visual-enhance.scss 里的背景微光 / 渐变数字 / 水晶图标 /
+//   玻璃质感 / 进场动画。纯 CSS，全部 scoped 在 body[data-brand='visual']，
+//   不影响其余 7 套主题；关掉即完全还原。
+// ============================================================================
+$bm-visual-palette: (
+  1: (
+    238,
+    240,
+    255
+  ),
+  2: (
+    224,
+    227,
+    254
+  ),
+  3: (
+    199,
+    203,
+    252
+  ),
+  4: (
+    165,
+    170,
+    250
+  ),
+  5: (
+    129,
+    134,
+    247
+  ),
+  6: (
+    99,
+    102,
+    241
+  ),
+  7: (
+    79,
+    70,
+    229
+  ),
+  8: (
+    67,
+    56,
+    202
+  ),
+  9: (
+    55,
+    48,
+    163
+  ),
+  10: (
+    49,
+    46,
+    129
+  )
+);
+
+body[data-brand='visual'] {
+  @include bm-brand-palette($bm-visual-palette);
+
+  /* 更大、更饱满的圆角（走圆润高级感，不走 Linear 的锐利） */
+  --bm-radius-sm: 10px;
+  --bm-radius: 16px;
+  --bm-radius-lg: 22px;
+
+  /* 冷调近白页面底（背景微光在 enhance 层叠加） */
+  --bm-border: #e7e8f5;
+  --bm-border-light: #eef0fb;
+  --bm-fill: #eef0fb;
+  --bm-fill-light: #f6f7fe;
+  --bm-bg-page: #f4f5fd;
+  --bm-bg-card: #ffffff;
+  --app-content-bg-color: #f4f5fd;
+
+  /* 带品牌色的柔和厚投影——让卡片「漂浮」起来（漂亮版的核心质感之一） */
+  --bm-shadow-card:
+    0 2px 6px -2px rgba(79, 70, 229, 0.1), 0 12px 28px -12px rgba(79, 70, 229, 0.18);
+  --bm-shadow-hover:
+    0 10px 24px -8px rgba(79, 70, 229, 0.28), 0 22px 48px -16px rgba(99, 102, 241, 0.32);
+  --bm-shadow-popup: 0 8px 24px -6px rgba(49, 46, 129, 0.2);
+  --bm-shadow-modal: 0 16px 48px -8px rgba(49, 46, 129, 0.3);
+
+  /* 品牌渐变 token：enhance 层大量复用（标题 / 数字 / 按钮 / 图标 / 强调条） */
+  --bm-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 52%, #06b6d4 120%);
+  --bm-grad-strong: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #0891b2 120%);
+  --bm-grad-soft: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.14),
+    rgba(139, 92, 246, 0.1) 60%,
+    rgba(6, 182, 212, 0.1)
+  );
+  --bm-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body[data-brand='visual'][arco-theme='dark'] {
+  @include bm-brand-palette-dark($bm-visual-palette);
+
+  /* 深空午夜画布：近黑偏靛蓝，配合渐变与微光形成「AI 仪表盘」高级夜色。
+     ⚠ 必须重置明色块设过的所有 --bm-* 表面/边框/填充/阴影，避免泄漏到暗色。 */
+  --color-bg-1: #080a14;
+  --color-bg-2: #11131f;
+  --color-bg-3: #171a29;
+  --color-bg-4: #1f2234;
+  --color-bg-5: #292d43;
+
+  --bm-border: #282b45;
+  --bm-border-light: #1b1e30;
+  --bm-fill: #171a29;
+  --bm-fill-light: #11131f;
+  --bm-bg-page: #080a14;
+  --bm-bg-card: #11131f;
+  --app-content-bg-color: #080a14;
+
+  /* 暗色下投影更深，微光靠 enhance 层的渐变叠底补足层次 */
+  --bm-shadow-card: 0 2px 8px -2px rgba(0, 0, 0, 0.5), 0 14px 32px -14px rgba(99, 102, 241, 0.25);
+  --bm-shadow-hover: 0 12px 28px -8px rgba(0, 0, 0, 0.6), 0 22px 52px -16px rgba(99, 102, 241, 0.4);
+}
+
+// ============================================================================
+// 暗色侧栏菜单底：钉回与 --color-bg-2 一致
+//
+// Arco 暗色把 --color-menu-light-bg 写死为中性灰 #232324，而各品牌暗色会把
+// --color-bg-2 改成带色相的午夜底（科技青/琥珀/玫红…）。菜单项默认
+// `background: var(--color-menu-light-bg)`，会在有色侧栏上叠出一排灰「药丸块」
+// （青底上像褐斑、琥珀底上像脏灰）。商务蓝之所以没事：它的 bg-2 也是 #232324，两色重合。
+// 有 data-brand 的暗色统一把菜单底钉到当前品牌的侧栏色。
+// ============================================================================
+body[data-brand][arco-theme='dark'] {
+  --color-menu-light-bg: var(--color-bg-2);
+}
+
+// 暗色下品牌浅底改半透明主色，避免色板反转后 --bm-brand-bg = rgb(primary-1)
+// 变成近黑实色块（钉选按钮 / 顶栏激活钮等会露出脏底）。
+body[arco-theme='dark'] {
+  --bm-brand-bg: rgba(var(--primary-6), 0.16);
+  --bm-info-bg: rgba(var(--primary-6), 0.16);
+
+  // --bm-text-3 在明色是写死的 #656f7d（见 :root 处的取值理由），暗色下它就是「深灰压深底」。
+  // 这里交还给 Arco 的灰阶：暗色色板整体翻转，gray-7 是浅灰，方向自动正确（实测已达标）。
+  --bm-text-3: rgb(var(--gray-7));
+
+  // 实心彩底：暗色下色阶翻转（序号越大越亮），明色那套 -7/-8 在这里是浅色，
+  // 压白字反而更差（实测品牌 2.58 · 绿 1.61 · 橙 1.47 · 红 2.29）。
+  // 换到小序号那端取「白字仍达标」的一档，实测：品牌 7.7/6.29 · 绿 5.07 · 橙 5.78 · 红 5.28。
+  --bm-brand-solid: rgb(var(--arcoblue-4));
+  --bm-success-solid: rgb(var(--green-3));
+  --bm-warning-solid: rgb(var(--orange-3));
+  --bm-danger-solid: rgb(var(--red-4));
+
+  --bm-brand-grad: linear-gradient(
+    135deg,
+    rgb(var(--arcoblue-4)) 0%,
+    rgb(var(--arcoblue-3)) 100%
+  );
+}

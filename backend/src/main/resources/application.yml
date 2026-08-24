@@ -1,0 +1,83 @@
+server:
+  port: 48080
+
+spring:
+  application:
+    name: campus-book
+  # 本地私有配置：在 backend/ 下放一个 application-my.yml 覆盖库连接、密钥等，该文件不入库
+  config:
+    import: optional:file:./application-my.yml
+  # 库不存在时先手工建库：CREATE DATABASE student_ershou DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  # 表结构与初始数据由 Flyway 在启动时自动执行，脚本见 resources/db/migration
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:student_ershou}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:12345678}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 32MB
+      max-request-size: 64MB
+  threads:
+    virtual:
+      enabled: true
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.basepro.system.entity,com.basepro.infra.entity,com.basepro.business.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+basepro:
+  jwt:
+    # 生产环境务必替换：任意 32 字节以上的随机字符串
+    secret: ${JWT_SECRET:basepro-admin-change-this-secret-key-in-production-32bytes}
+    # 访问令牌是无状态 JWT，服务端不存、也无法提前作废：登出只吊销刷新令牌（sys_token），
+    # 已签发的访问令牌到期前仍然有效。因此别把有效期设得太长，靠刷新令牌续期。
+    access-token-expire: 30m
+    refresh-token-expire: 30d
+  tenant:
+    enabled: true
+    # 不做租户隔离的表：平台级配置、菜单、字典、令牌
+    ignore-tables:
+      - sys_tenant
+      - sys_menu
+      - sys_dict_type
+      - sys_dict_data
+      - sys_config
+      - sys_token
+      - flyway_schema_history
+  file:
+    # 本地存储目录，可改为绝对路径
+    dir: ./data/upload
+
+logging:
+  level:
+    com.basepro: debug
+    org.springframework.jdbc.core: debug

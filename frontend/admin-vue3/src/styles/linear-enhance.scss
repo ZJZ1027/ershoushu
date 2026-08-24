@@ -1,0 +1,415 @@
+// ============================================================================
+// Linear 增强层（仅 body[data-brand='linear'] 生效；商务蓝模式完全不受影响）
+//
+// 在色板/圆角/阴影之外，补齐 Linear 真正的招牌特征（依据官方 brand 页 + 多份设计
+// 系统拆解）：
+//   1) 排版：Inter Variable + 单层故事 a(cv01) + 几何字形(ss03)，UI 强调用 510 字重，
+//      大标题轻负字距（中文为主，负字距克制，避免中文挤在一起）；
+//   2) 微交互：点击 scale(0.97) 触感 + Linear 缓动 cubic-bezier(0.22,1,0.36,1)；
+//   3) 焦点环：靛紫 focus ring；
+//   4) 侧栏：去蓝渐变/去投影，选中改「中性高亮块 + 靛紫文字」，510 字重；
+//   5) 表格：仪表盘化——表头中性、整行 hover 微亮；
+//   6) 卡片 hover 收敛：去大位移+大阴影，改边框微亮；
+//   7) chip/tag 圆角收敛到 6px。
+//
+// 依赖：main.ts 已 `import '@fontsource-variable/inter'`（提供字体族 "Inter Variable"）。
+// 覆盖侧栏 scoped 样式：用 body[data-brand] + .arco-menu 提高特异度，并保留 !important。
+// ============================================================================
+
+body[data-brand='linear'] {
+  /* Linear 缓动（本层复用） */
+  --bm-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* 招牌排版：Inter 优先，中文回退系统字体（Inter 不含中文） */
+  --bm-font-display:
+    'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --bm-font-num:
+    'Inter Variable', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
+
+  font-family:
+    'Inter Variable',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  /* cv01=单层 a，ss03=几何字形——Inter「变成 Linear 那种工程感」的关键两个特性 */
+  font-feature-settings:
+    'cv01' 1,
+    'ss03' 1;
+}
+
+/* 大标题/区块标题：轻负字距，Linear 式压缩、工程感（中文为主，克制在 -0.01em） */
+body[data-brand='linear'] h1,
+body[data-brand='linear'] h2,
+body[data-brand='linear'] h3,
+body[data-brand='linear'] .bm-page-title {
+  letter-spacing: -0.01em;
+}
+
+/* ===== 微交互：Linear 缓动 + 点击 scale(0.97) 触感 ===== */
+body[data-brand='linear'] .arco-btn {
+  transition:
+    background-color var(--bm-dur-fast) var(--bm-ease-out),
+    border-color var(--bm-dur-fast) var(--bm-ease-out),
+    color var(--bm-dur-fast) var(--bm-ease-out),
+    transform var(--bm-dur-fast) var(--bm-ease-out);
+}
+body[data-brand='linear'] .arco-btn:active {
+  transform: scale(0.97);
+}
+
+/* ===== 焦点环：靛紫（输入 / 选择 / 文本域）===== */
+body[data-brand='linear'] .arco-input-wrapper:focus-within,
+body[data-brand='linear'] .arco-select-view:focus-within,
+body[data-brand='linear'] .arco-textarea-wrapper:focus-within {
+  border-color: var(--bm-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bm-brand) 22%, transparent);
+}
+
+/* ===== 侧栏选中态：Linear 主题统一复用「商务蓝」默认侧栏样式 =====
+ * 需求：两主题的菜单选中态一致——父级蓝渐变 + 白字、叶子「左侧蓝竖条 + 蓝字」（即图2）。
+ * 因此这里不再把 Linear 选中态改成「中性高亮块 + 无竖条」（原图1效果），
+ * 交回 SideMenu.vue 的默认样式渲染；品牌变量已在 SideMenu.vue 的非 scoped 块内于
+ * .arco-menu 子树钉回商务蓝，故 Linear 侧栏选中态与默认主题完全一致。
+ * 未选中态的密度/灰阶弱化仍保留（见下方「侧栏密度 & 层级」）。 */
+
+/* ===== 侧栏密度 & 层级：Linear 式紧凑（34px 行高 / 13px）、未选中弱化为二级灰、
+ * 图标缩小、细滚动条。让侧栏从「商务导航」变成 Linear 那种安静、克制的工程侧栏。 ===== */
+body[data-brand='linear'] .arco-menu:not(.arco-menu-collapsed) .arco-menu-inner {
+  padding: 6px !important;
+}
+body[data-brand='linear'] .arco-menu-inner .arco-menu-item,
+body[data-brand='linear'] .arco-menu-inner .arco-menu-inline-header,
+body[data-brand='linear'] .arco-menu-inner .arco-menu-pop-header {
+  height: 34px;
+  line-height: 34px;
+  font-size: 13px;
+  margin-bottom: 1px;
+  border-radius: 6px;
+}
+/* 未选中：文字/图标退成二级/三级灰，只有选中项亮起（Linear 的安静层级感） */
+body[data-brand='linear'] .arco-menu-item:not(.arco-menu-selected),
+body[data-brand='linear'] .arco-menu-inline-header:not(.arco-menu-selected) {
+  color: var(--bm-text-2, #4e5969);
+  font-weight: 450;
+}
+body[data-brand='linear'] .arco-menu-item:not(.arco-menu-selected) .arco-menu-icon,
+body[data-brand='linear'] .arco-menu-inline-header:not(.arco-menu-selected) .arco-menu-icon {
+  color: var(--bm-text-3, #86909c);
+}
+/* 图标略缩，工程感 */
+body[data-brand='linear'] .arco-menu-icon .arco-icon {
+  font-size: 16px;
+}
+/* 侧栏细滚动条 */
+body[data-brand='linear'] .arco-menu-inner::-webkit-scrollbar,
+body[data-brand='linear'] .arco-menu-inline-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+body[data-brand='linear'] .arco-menu-inner::-webkit-scrollbar-thumb,
+body[data-brand='linear'] .arco-menu-inline-content::-webkit-scrollbar-thumb {
+  background: var(--bm-border, #e5e6eb);
+  border-radius: 4px;
+}
+
+/* ===== 表格：仪表盘 / IDE 化——锐利边、行 hairline 分隔、密度收紧、整行 hover 微亮 =====
+ * Linear 的数据面像 Bloomberg 终端：格子靠 1px 线分隔而非留白/圆角。这里在 Linear 模式
+ * 把 Arco 表格容器去圆角、表头中性加重、每行底部 hairline、单元格纵向 padding 收紧。 */
+body[data-brand='linear'] .arco-table-container,
+body[data-brand='linear'] .arco-table-element,
+body[data-brand='linear'] .arco-table-body {
+  border-radius: 0 !important;
+}
+body[data-brand='linear'] .arco-table-th {
+  background-color: var(--bm-fill-light) !important;
+  border-bottom: 1px solid var(--bm-border) !important;
+  font-weight: 510;
+  color: var(--bm-text-2);
+}
+body[data-brand='linear'] .arco-table-td {
+  border-bottom: 1px solid var(--bm-border-light) !important;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+}
+body[data-brand='linear'] .arco-table-tr:hover .arco-table-td {
+  background-color: var(--bm-fill-light) !important;
+}
+
+/* ===== chip / tag 圆角收敛（Linear 6px）===== */
+body[data-brand='linear'] .arco-tag {
+  border-radius: 6px;
+}
+
+/* ===== 卡片 hover 收敛：去大位移 + 大阴影，改边框微亮（Linear 式克制）===== */
+body[data-brand='linear'] .biz-card:hover,
+body[data-brand='linear'] .biz-row:hover,
+body[data-brand='linear'] .list-card:hover {
+  transform: none !important;
+  box-shadow: var(--bm-shadow-card) !important;
+  border-color: color-mix(in srgb, var(--bm-brand) 32%, var(--bm-border)) !important;
+}
+
+/* ===== 顶栏 / 面包屑：Linear 式安静 chrome ===============================
+ * Linear 的顶栏是「几乎隐形」的：图标钮无描边圈、hover 才浮出淡填充；logo 不用
+ * 商务蓝玻璃辉光；分隔线统一收成 hairline。让顶栏从「工具条」退成安静背景。 */
+
+/* 右侧图标钮：去 outline 描边，改幽灵态（hover 才有中性填充 + 靛紫图标） */
+body[data-brand='linear'] .arco-navbar .nav-btn {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  color: var(--bm-text-2) !important;
+}
+body[data-brand='linear'] .arco-navbar .nav-btn:hover {
+  border-color: transparent !important;
+  background-color: var(--bm-fill-light) !important;
+  color: var(--bm-brand) !important;
+}
+/* 品牌切换钮激活态：靛紫幽灵高亮，不要描边圈 */
+body[data-brand='linear'] .arco-navbar .nav-btn-active {
+  border-color: transparent !important;
+  background-color: var(--bm-brand-bg) !important;
+  color: var(--bm-brand) !important;
+}
+
+/* Logo：客户 logo 自带蓝底圆角块，Linear 主题连投影也不要（安静内敛，全靠形状本身） */
+body[data-brand='linear'] .arco-navbar .brand-logo {
+  box-shadow: none !important;
+}
+
+/* 顶栏底边 / 侧栏右边：统一收成 Linear hairline（跟随品牌中性边框色） */
+body[data-brand='linear'] .arco-app-header,
+body[data-brand='linear'] .arco-app-sider {
+  border-color: var(--bm-border) !important;
+}
+
+/* 面包屑：收薄一档，更贴近 Linear 的细长导航条 */
+body[data-brand='linear'] .arco-breadcrumb-bar {
+  height: 40px;
+}
+
+/* ===== 标签栏（TabBar）：Linear 式扁平文字标签 + 靛紫下划线指示条 ============
+ * 默认是「实心 chip + 蓝边药丸」；Linear 的多标签是安静的文字标签，未选中退成灰、
+ * 选中不用填充块而是「靛紫文字 + 底部 2px 指示条」，读起来像浏览器/编辑器的标签页。 */
+body[data-brand='linear'] .arco-tab-bar {
+  border-color: var(--bm-border) !important;
+}
+body[data-brand='linear'] .arco-tab-bar .tab-chip {
+  position: relative;
+  height: 28px;
+  line-height: 28px;
+  margin-right: 2px;
+  padding: 0 6px 0 8px;
+  background-color: transparent !important;
+  border: none !important;
+  border-radius: 6px 6px 0 0 !important;
+  color: var(--bm-text-3) !important;
+}
+body[data-brand='linear'] .arco-tab-bar .tab-chip:hover {
+  background-color: var(--bm-fill-light) !important;
+  color: var(--bm-text-1) !important;
+}
+/* 选中：靛紫文字 + 底部指示条，无填充无边框 */
+body[data-brand='linear'] .arco-tab-bar .tab-chip.is-active {
+  background-color: transparent !important;
+  border: none !important;
+  color: var(--bm-brand) !important;
+}
+body[data-brand='linear'] .arco-tab-bar .tab-chip.is-active .tab-link,
+body[data-brand='linear'] .arco-tab-bar .tab-chip.is-active .arco-tag-close-btn {
+  color: var(--bm-brand) !important;
+}
+body[data-brand='linear'] .arco-tab-bar .tab-chip.is-active::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background-color: var(--bm-brand);
+}
+
+/* ===== 表单控件：Linear 收敛 —— 圆角 6px 统一 + hover/focus 靛紫细反馈 ==========
+ * 不改 Arco 的填充基调（以免破坏 error/disabled 态），只在圆角与交互边框上做 Linear
+ * 收敛。选中色（开关/单选/多选/滑块等）已随品牌色板自动变靛紫，无需单独处理。 */
+body[data-brand='linear'] .arco-input-wrapper,
+body[data-brand='linear'] .arco-select-view,
+body[data-brand='linear'] .arco-textarea-wrapper,
+body[data-brand='linear'] .arco-input-number,
+body[data-brand='linear'] .arco-picker {
+  border-radius: 6px;
+}
+/* hover：浮现靛紫细边（排除禁用 / 错误态） */
+body[data-brand='linear']
+  .arco-input-wrapper:not(.arco-input-wrapper-disabled):not(.arco-input-wrapper-error):hover,
+body[data-brand='linear']
+  .arco-select-view:not(.arco-select-view-disabled):not(.arco-select-view-error):hover,
+body[data-brand='linear']
+  .arco-textarea-wrapper:not(.arco-textarea-wrapper-disabled):not(
+    .arco-textarea-wrapper-error
+  ):hover,
+body[data-brand='linear'] .arco-picker:not(.arco-picker-disabled):not(.arco-picker-error):hover {
+  border-color: color-mix(in srgb, var(--bm-brand) 40%, var(--bm-border));
+}
+/* focus 环补充：日期选择器（输入 / 选择 / 文本域已在色板层覆盖 focus-within） */
+body[data-brand='linear'] .arco-picker:focus-within {
+  border-color: var(--bm-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bm-brand) 22%, transparent);
+}
+
+/* ===== 弹窗 / 抽屉 / 浮层：Linear 化 ========================================
+ * Linear 的浮层是「安静的卡片浮起」：克制圆角 + 大而柔的阴影 + hairline 分隔 +
+ * 标题轻收敛 + 淡化并轻微模糊的遮罩（聚焦感）。 */
+
+/* 遮罩：更淡 + 轻微背景模糊（无效类名时规则自动忽略，不影响其它） */
+body[data-brand='linear'] .arco-modal-mask,
+body[data-brand='linear'] .arco-drawer-mask,
+body[data-brand='linear'] .arco-mask {
+  background-color: rgba(10, 10, 12, 0.44) !important;
+  backdrop-filter: blur(2px);
+}
+
+/* Modal 主体：克制圆角 + 细边 + 柔和阴影（圆角裁切 header/footer 分隔线） */
+body[data-brand='linear'] .arco-modal {
+  border-radius: 10px;
+  border: 1px solid var(--bm-border);
+  box-shadow:
+    0 12px 40px -8px rgba(0, 0, 0, 0.28),
+    0 2px 8px -2px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+body[data-brand='linear'] .arco-modal-header {
+  border-bottom: 1px solid var(--bm-border-light);
+}
+body[data-brand='linear'] .arco-modal-footer {
+  border-top: 1px solid var(--bm-border-light);
+}
+body[data-brand='linear'] .arco-modal-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Drawer 主体：柔和四向阴影 + hairline 分隔 + 标题收敛 */
+body[data-brand='linear'] .arco-drawer {
+  box-shadow: 0 8px 40px -8px rgba(0, 0, 0, 0.24);
+}
+body[data-brand='linear'] .arco-drawer-header {
+  border-bottom: 1px solid var(--bm-border-light);
+}
+body[data-brand='linear'] .arco-drawer-footer {
+  border-top: 1px solid var(--bm-border-light);
+}
+body[data-brand='linear'] .arco-drawer-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* 浮层（下拉 / 选择 / 气泡 / 日期面板）：统一 Linear 卡片质感（细边 + 收敛圆角 + 柔阴影）
+ * 注意：气泡卡片真身是 `.arco-popover-popup-content`（带背景/边框/阴影那层），
+ * `.arco-popover-content` 只是内部文本包裹层——早期误写成后者，导致 Linear 下气泡
+ * （如顶栏「站内信」下拉）拿不到圆角/细边/柔阴影，退回 Arco 默认样式且内层多出一圈方框。 */
+body[data-brand='linear'] .arco-dropdown,
+body[data-brand='linear'] .arco-select-dropdown,
+body[data-brand='linear'] .arco-popover-popup-content,
+body[data-brand='linear'] .arco-picker-container {
+  border: 1px solid var(--bm-border);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 28px -8px rgba(0, 0, 0, 0.22),
+    0 2px 6px -2px rgba(0, 0, 0, 0.12);
+}
+/* 气泡内容常是全出血面板（如站内信下拉 padding=0 的表头/列表/底栏），裁切到圆角，
+ * 否则表头分隔线、悬浮底色、底栏会在四角露出方角。箭头是同级元素，不受影响。 */
+body[data-brand='linear'] .arco-popover-popup-content {
+  overflow: hidden;
+}
+
+/* ===== 空状态 / 加载 / 骨架屏 / 分页：Linear 收尾 —— 安静、克制、灰阶收敛 =========
+ * Linear 的空态与加载都很「安静」：不喧宾夺主，用低对比灰阶与薄雾感传达状态。 */
+
+/* 空状态：图标弱化、说明更淡 */
+body[data-brand='linear'] .arco-empty-image {
+  opacity: 0.7;
+  color: var(--bm-text-3);
+}
+body[data-brand='linear'] .arco-empty-description {
+  color: var(--bm-text-3);
+  font-size: 13px;
+}
+
+/* 加载遮罩：薄雾感（半透明面色 + 轻模糊），不遮死内容；spinner 已随品牌色自动靛紫 */
+body[data-brand='linear'] .arco-spin-mask {
+  background-color: color-mix(in srgb, var(--bm-bg-card) 60%, transparent);
+  backdrop-filter: blur(1px);
+}
+
+/* 骨架屏：灰阶收敛 + 更柔的微光扫过（去高对比闪烁） */
+body[data-brand='linear'] .arco-skeleton-line-row,
+body[data-brand='linear'] .arco-skeleton-shape {
+  background-color: var(--bm-fill-light);
+  border-radius: 6px;
+}
+body[data-brand='linear'] .arco-skeleton-animate .arco-skeleton-line-row,
+body[data-brand='linear'] .arco-skeleton-animate .arco-skeleton-shape {
+  background: linear-gradient(
+    90deg,
+    var(--bm-fill-light) 25%,
+    var(--bm-border-light) 37%,
+    var(--bm-fill-light) 63%
+  );
+  background-size: 400% 100%;
+}
+
+/* 分页：圆角收敛 + hover 中性靛紫（选中项已随品牌色自动靛紫） */
+body[data-brand='linear'] .arco-pagination-item {
+  border-radius: 6px;
+}
+body[data-brand='linear'] .arco-pagination-item:not(.arco-pagination-item-active):hover {
+  background-color: var(--bm-fill-light);
+  color: var(--bm-brand);
+}
+
+/* ===== 其余控件收尾：卡片 / 折叠 / 页签 / 分割线 / 步骤条 对齐 Linear ===========
+ * 多数控件（步骤条圆点、进度条、滑块、Tabs 下划线等）已随品牌色板自动靛紫，这里只补
+ * 圆角收敛与 hairline 分隔，把最后的边角也统一到 Linear 语气。 */
+
+/* Card：圆角收敛 + hairline 边（与内容区卡片同一质感） */
+body[data-brand='linear'] .arco-card {
+  border-radius: 8px;
+  border: 1px solid var(--bm-border-light);
+}
+
+/* Collapse：外框圆角 + 分隔 hairline + header hover 中性 */
+body[data-brand='linear'] .arco-collapse {
+  border-radius: 8px;
+}
+body[data-brand='linear'] .arco-collapse-item {
+  border-color: var(--bm-border-light) !important;
+}
+body[data-brand='linear'] .arco-collapse-item-header:hover {
+  background-color: var(--bm-fill-light);
+}
+
+/* Tabs（页签页，非顶部标签栏）：底边 hairline，选中下划线已随品牌色靛紫 */
+body[data-brand='linear'] .arco-tabs-nav::before {
+  background-color: var(--bm-border-light) !important;
+}
+
+/* Divider：统一 hairline 色 */
+body[data-brand='linear'] .arco-divider-horizontal,
+body[data-brand='linear'] .arco-divider-vertical {
+  border-color: var(--bm-border-light);
+}
+
+/* Steps：当前步骤标题收敛加重（圆点/连接线已随品牌色靛紫） */
+body[data-brand='linear'] .arco-steps-item-active .arco-steps-item-title {
+  font-weight: 600;
+}

@@ -1,0 +1,600 @@
+// ============================================================================
+// 视觉体验版 增强层（仅 body[data-brand='visual'] 生效；其余 7 套主题完全不受影响）
+//
+// 定位：给客户看的「漂亮 / 惊艳」版。在 design-tokens.scss 的色板/圆角/厚投影之上，
+// 再叠加真正拉开「高级感」的那几样（纯 CSS，关掉主题即完全还原）：
+//   1) 背景微光：内容区四角靛/紫/青柔光晕，随视口固定；
+//   2) 厚卡片：品牌色渐变描边高光 + 悬浮上浮发光；
+//   3) 渐变大数字：KPI 主数字 / 大标题用靛→紫→青渐变文字；
+//   4) 水晶图标：图标块加渐变高光 + 内嵌反光 + 彩色投影；
+//   5) 玻璃质感：顶栏半透明 + 背景模糊；
+//   6) 进场动画：卡片淡入上浮，KPI 依次错峰入场；
+//   7) 渐变按钮 / 渐变进度条 / 药丸标签等细节。
+//
+// 特异度：body[data-brand='visual'] 前缀（0-2-x）可压过组件 scoped 样式（0-2-0）；
+// 覆盖 Arco 原生类时按需 !important（沿用 linear-enhance.scss 的既有做法）。
+// 明暗自适应：颜色尽量走 --bm-* token + color-mix，dark 由 token 块负责翻转。
+// ============================================================================
+
+/* ===== 全局缓动 & 平滑过渡 ===== */
+body[data-brand='visual'] {
+  --bm-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+// 卡片顶部的「受光高光线」。
+//
+// 别写成 `inset: 0 0 auto 0; height: 2px; border-radius: inherit` —— 那样伪元素只有 2px 高，
+// 而 border-radius 规范要求同一条边上的两个半径之和不超过该边长度，超了就按比例缩，
+// 于是 inherit 来的 22px 圆角被压成 1px：线是笔直横过去的，卡角却按 22px 弯走，
+// 线的两端便悬在卡片轮廓外侧（本主题圆角大，肉眼很明显）。
+//
+// 正确做法是让伪元素铺满整卡（圆角作用在真实尺寸上才是真圆角），只把渐变当成一条
+// 贴顶的背景条来画 —— 背景会被圆角裁掉，线自然沿着卡角收口。
+// inset: -1px 是为了盖住那 1px 描边，让高光线与卡片外轮廓严丝合缝。
+@mixin bm-top-highlight($h, $bg, $opacity: 1) {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: $bg top center / 100% $h no-repeat;
+  opacity: $opacity;
+  pointer-events: none;
+}
+
+/* ===== 1) 背景微光：内容滚动区四角柔光晕（固定于视口，滚动不跟走） =====
+ * 内容区底色本身不透明，会盖住 body 的光晕，所以把光晕直接叠在滚动容器的背景上。 */
+body[data-brand='visual'] .content-scroll {
+  background-image:
+    radial-gradient(62% 48% at 8% -4%, rgba(99, 102, 241, 0.14), transparent 72%),
+    radial-gradient(52% 42% at 104% 4%, rgba(6, 182, 212, 0.1), transparent 70%),
+    radial-gradient(46% 44% at 92% 108%, rgba(139, 92, 246, 0.1), transparent 72%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+body[data-brand='visual'][arco-theme='dark'] .content-scroll {
+  background-image:
+    radial-gradient(62% 48% at 8% -4%, rgba(99, 102, 241, 0.22), transparent 72%),
+    radial-gradient(52% 42% at 104% 4%, rgba(8, 145, 178, 0.16), transparent 70%),
+    radial-gradient(46% 44% at 92% 108%, rgba(139, 92, 246, 0.18), transparent 72%);
+}
+
+/* ===== 2) 厚卡片：品牌色高光描边 + 悬浮上浮发光 =====
+ * 统一作用于设计卡（.stat-card / .panel）与 Arco 卡（.arco-card）以及首页几个特殊块。 */
+body[data-brand='visual'] .stat-card,
+body[data-brand='visual'] .panel,
+body[data-brand='visual'] .arco-card {
+  position: relative;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bm-brand) 4%, var(--bm-bg-card)),
+    var(--bm-bg-card) 42%
+  );
+  border-color: color-mix(in srgb, var(--bm-brand) 12%, var(--bm-border-light)) !important;
+  transition:
+    transform var(--bm-dur-slow) var(--bm-ease-out),
+    box-shadow var(--bm-dur-slow) var(--bm-ease-out),
+    border-color var(--bm-dur-slow) var(--bm-ease-out);
+}
+/* 顶部一道极细的高光线，模拟「玻璃 / 亚克力」受光边（漂亮版质感关键细节之一） */
+body[data-brand='visual'] .stat-card::before,
+body[data-brand='visual'] .panel::before {
+  @include bm-top-highlight(
+    1px,
+    linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--bm-brand) 45%, transparent) 22%,
+      color-mix(in srgb, #8b5cf6 45%, transparent) 55%,
+      color-mix(in srgb, #06b6d4 40%, transparent) 82%,
+      transparent
+    ),
+    0.7
+  );
+}
+body[data-brand='visual'] .stat-card:hover,
+body[data-brand='visual'] .panel:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--bm-shadow-hover);
+  border-color: color-mix(in srgb, var(--bm-brand) 40%, transparent) !important;
+}
+
+/* ===== 3) 渐变大数字：KPI 主数字 / 首页大标题 走靛→紫→青渐变文字 =====
+ * 只用于「大号展示型」数字与标题，正文/小字不动（渐变文字牺牲一点清晰度，仅限大字号）。 */
+/* .hero-title 会被抽屉/报告头等正文级标题复用，渐变裁切套到 16px 的密排中文上就发虚，
+   所以限定在首页问候语容器 .hero-greet 里，不要放开成全局 .hero-title。 */
+body[data-brand='visual'] .stat-value,
+body[data-brand='visual'] .hero-greet .hero-title {
+  background: var(--bm-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--bm-brand); /* 不支持 background-clip:text 时的兜底 */
+}
+/* 数字单位/百分号跟随主色即可，不参与渐变裁切（避免透明看不清） */
+body[data-brand='visual'] .stat-unit {
+  -webkit-text-fill-color: currentcolor;
+  color: var(--bm-text-3);
+}
+
+/* ===== 4) 水晶图标：渐变高光 + 内嵌反光 + 彩色投影（保留各自语义色相 --c） =====
+ * StatCard 的 .stat-icon 用 --c/--cbg 表达语义色；这里在其基础上加「水晶」质感，
+ * 既不丢语义又更精致。首页套餐礼盒图标 .ps-icon 同款处理。 */
+body[data-brand='visual'] .stat-card:not(.tone-neutral) .stat-icon {
+  background-image: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--c, var(--bm-brand)) 78%, white),
+    var(--c, var(--bm-brand))
+  );
+  color: #fff !important;
+  box-shadow:
+    0 6px 14px -4px color-mix(in srgb, var(--c, var(--bm-brand)) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+/* tone-neutral 的 --c 是文字灰(#5f6874)，套上水晶渐变会变成一块近黑的实心砖，
+   在一排彩色卡里反而最抢眼 —— 与「已停用 / 计数为 0」要表达的「弱」正好相反。
+   中性态回到淡底 + 灰字，把重量让给有语义的那几张。 */
+body[data-brand='visual'] .stat-card.tone-neutral .stat-icon {
+  background: var(--bm-fill);
+  color: var(--bm-text-3);
+  box-shadow: none;
+}
+body[data-brand='visual'] .ps-icon {
+  background-image: var(--bm-grad);
+  color: #fff !important;
+  box-shadow:
+    0 8px 18px -6px color-mix(in srgb, var(--bm-brand) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ===== 5) 面板标题强调条：从纯色小竖条升级为渐变圆角条 ===== */
+body[data-brand='visual'] .panel-title::before {
+  background: var(--bm-grad) !important;
+  border-radius: 4px;
+  width: 4px;
+}
+
+/* ===== 6) 进场动画：卡片淡入 + 上浮；首页 KPI 依次错峰入场 ===== */
+@keyframes vx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+body[data-brand='visual'] .welcome-card,
+body[data-brand='visual'] .stat-card,
+body[data-brand='visual'] .panel {
+  animation: vx-rise var(--bm-dur-enter) var(--bm-ease-out) both;
+}
+/* KPI 卡错峰：直接子卡按序延迟，形成瀑布入场。步长与 .bm-stagger 统一为 40ms/项 */
+@for $i from 1 through 6 {
+  body[data-brand='visual'] .kpi-grid .stat-card:nth-child(#{$i}) {
+    animation-delay: #{$i * 40}ms;
+  }
+}
+/* 尊重「减少动态效果」偏好：关掉入场动画，保证内容立即可见 */
+@media (prefers-reduced-motion: reduce) {
+  body[data-brand='visual'] .welcome-card,
+  body[data-brand='visual'] .stat-card,
+  body[data-brand='visual'] .panel {
+    animation: none;
+  }
+}
+
+/* ===== 7) 渐变主按钮：填充渐变 + 发光投影 + 悬浮上浮 =====
+ * ⚠ 必须排掉 danger / warning / success 三种语义主按钮：它们的红/橙/绿是靠
+ * background-color 上色，而这里刷的是 background-image，图层在颜色之上 ——
+ * 结果「确认删除」的红色主按钮会被染成靛蓝渐变，和「保存」长得一模一样，
+ * 破坏性操作失去唯一的视觉警示。全局那条渐变规则本来就做了同样的排除。
+ *
+ * ⚠ 底色用 -strong 不用 --bm-grad：--bm-grad 三档（#6366f1/#8b5cf6/#06b6d4）压白字实测
+ * 只有 4.47 / 4.23 / 2.46，小字要 4.5。-strong 那三档（#4f46e5/#7c3aed/#0891b2）
+ * 沿渐变轴全程算下来是 4.69~6.29，白字站得住。凡是「渐变底 + 白字」都走 -strong，
+ * --bm-grad 留给渐变文字(background-clip)、强调条、进度条、墨条这些不压字的装饰面。 */
+body[data-brand='visual']
+  .arco-btn-primary:not(.arco-btn-status-warning):not(.arco-btn-status-danger):not(
+    .arco-btn-status-success
+  ):not(.arco-btn-disabled) {
+  background-image: var(--bm-grad-strong);
+  border-color: transparent;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--bm-brand) 65%, transparent);
+  transition:
+    transform var(--bm-dur) var(--bm-ease-out),
+    box-shadow var(--bm-dur) var(--bm-ease-out),
+    filter var(--bm-dur) var(--bm-ease-out);
+
+  &:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px -6px color-mix(in srgb, var(--bm-brand) 72%, transparent);
+  }
+  &:active {
+    transform: translateY(0) scale(0.98);
+  }
+}
+
+/* ===== 8) 渐变进度条：让用量/进度条更漂亮 ===== */
+body[data-brand='visual'] .arco-progress-line-bar {
+  background-image: var(--bm-grad) !important;
+}
+
+/* ===== 9) 玻璃顶栏：半透明 + 背景模糊（内容从下方透出，随滚动隐约流动） ===== */
+body[data-brand='visual'] .arco-app-header {
+  background-color: color-mix(in srgb, var(--bm-bg-card) 74%, transparent) !important;
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+}
+
+/* ===== 10) 药丸标签 + 品牌钮激活态 =====
+ * 标签圆角拉大成药丸，更活泼；顶栏品牌切换钮激活态用渐变淡底。 */
+body[data-brand='visual'] .arco-tag {
+  border-radius: 999px;
+}
+body[data-brand='visual'] .arco-navbar .nav-btn-active {
+  background-image: var(--bm-grad-soft);
+  color: var(--bm-brand) !important;
+}
+
+/* ===== 11) 侧栏选中项：渐变高亮块（呼应全站渐变语言） =====
+ * 只有「叶子菜单项」吃满渐变；分组标题(inline-header)选中时用淡渐变+品牌色文字，
+ * 避免父子两个满渐变胶囊叠在一起、分组文字看不清。 */
+body[data-brand='visual'] .arco-menu-inner .arco-menu-item.arco-menu-selected {
+  background-image: var(--bm-grad-strong) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--bm-brand) 60%, transparent);
+}
+body[data-brand='visual'] .arco-menu-inner .arco-menu-item.arco-menu-selected .arco-menu-icon {
+  color: #fff !important;
+}
+body[data-brand='visual'] .arco-menu-inner .arco-menu-inline-header.arco-menu-selected {
+  background-image: var(--bm-grad-soft) !important;
+  /* 分组标题（「项目管理」等）是 14px 正文号文字，-6 档压在淡渐变上实测 3.87，用文字档 */
+  color: var(--bm-brand-text) !important;
+  font-weight: 600;
+  box-shadow: none;
+}
+body[data-brand='visual']
+  .arco-menu-inner
+  .arco-menu-inline-header.arco-menu-selected
+  .arco-menu-icon {
+  color: var(--bm-brand-text) !important;
+}
+
+/* ===== 12) 弹窗 / 抽屉：更大圆角 + 玻璃遮罩，与全站圆润语言一致 ===== */
+body[data-brand='visual'] .arco-modal {
+  border-radius: 16px;
+  overflow: hidden;
+}
+body[data-brand='visual'] .arco-drawer {
+  border-radius: 16px 0 0 16px;
+  overflow: hidden;
+}
+body[data-brand='visual'] .arco-modal-mask,
+body[data-brand='visual'] .arco-drawer-mask {
+  backdrop-filter: blur(3px);
+}
+
+/* ===========================================================================
+ * 全站铺开（详情页 hero / 列表壳 / 业务卡族 / 表格 / 表单 / 浮层 / 收尾）
+ * 说明：设计卡（.pd-hero/.cd-hero/.fn-card/.list-card 等）本就用 --bm-* token，
+ * 已自动继承 visual 的厚投影/大圆角；下面再补「漂亮」专属的渐变洗色、受光高光线、
+ * 悬浮上浮发光、渐变描边等，让每一页都成体系。全部 scoped 在 body[data-brand='visual']。
+ * =========================================================================== */
+
+/* ===== 13) 详情页 / 概览 hero 门面：品牌渐变洗色 + 顶部受光高光线 =====
+ * 详情页/概览页的 hero 门面统一质感。 */
+body[data-brand='visual'] .pd-hero,
+body[data-brand='visual'] .cd-hero,
+body[data-brand='visual'] .cd-head,
+body[data-brand='visual'] .detail-hero,
+body[data-brand='visual'] .org-hero,
+body[data-brand='visual'] .overview-card,
+body[data-brand='visual'] .eval-hero,
+body[data-brand='visual'] .ob-home {
+  position: relative;
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bm-brand) 8%, var(--bm-bg-card)) 0%,
+    var(--bm-bg-card) 46%,
+    color-mix(in srgb, #06b6d4 5%, var(--bm-bg-card)) 100%
+  );
+  border-color: color-mix(in srgb, var(--bm-brand) 14%, var(--bm-border-light)) !important;
+}
+body[data-brand='visual'] .pd-hero::before,
+body[data-brand='visual'] .cd-hero::before,
+body[data-brand='visual'] .detail-hero::before,
+body[data-brand='visual'] .org-hero::before,
+body[data-brand='visual'] .overview-card::before,
+body[data-brand='visual'] .ob-home::before {
+  @include bm-top-highlight(2px, var(--bm-grad), 0.85);
+}
+
+/* 首页运营欢迎卡是这组里唯一的「深底白字」卡：标题、副标题、玻璃按钮全是白色系。
+   上面那套浅色 hero 渐变套到它身上会把整张卡刷成近白，白字与白描边按钮随即消失
+   （只剩填白底的主按钮还看得见）。这里单独给它本主题的饱和渐变，底色保持够深，
+   白字照常可读，同时换掉写死的品牌蓝、跟上靛→紫→青的主题语言。 */
+body[data-brand='visual'] .welcome-card {
+  background: var(--bm-grad-strong);
+  border-color: transparent !important;
+}
+
+/* ===== 14) 列表页外壳 .list-card：厚卡 + 顶部高光线 ===== */
+body[data-brand='visual'] .list-card {
+  position: relative;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bm-brand) 3%, var(--bm-bg-card)),
+    var(--bm-bg-card) 40%
+  );
+  border-color: color-mix(in srgb, var(--bm-brand) 10%, var(--bm-border-light)) !important;
+}
+body[data-brand='visual'] .list-card::before {
+  @include bm-top-highlight(
+    1px,
+    linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--bm-brand) 42%, transparent) 30%,
+      color-mix(in srgb, #06b6d4 38%, transparent) 70%,
+      transparent
+    ),
+    0.7
+  );
+}
+
+/* ===== 15) 业务卡族：悬浮上浮 + 渐变描边发光（命名各异，统一成选择器组） =====
+ * 只做交互增强（不加 ::before，规避各卡自带 overflow/绝对定位子元素的风险）。 */
+body[data-brand='visual'] .fn-card,
+body[data-brand='visual'] .biz-card,
+body[data-brand='visual'] .biz-row,
+body[data-brand='visual'] .proj-card,
+body[data-brand='visual'] .comp-card,
+body[data-brand='visual'] .fee-card,
+body[data-brand='visual'] .rc-card,
+body[data-brand='visual'] .fav-card,
+body[data-brand='visual'] .src-card,
+body[data-brand='visual'] .board-card,
+body[data-brand='visual'] .task-card,
+body[data-brand='visual'] .qualify-card,
+body[data-brand='visual'] .rag-card,
+body[data-brand='visual'] .op-card {
+  transition:
+    transform var(--bm-dur-slow) var(--bm-ease-out),
+    box-shadow var(--bm-dur-slow) var(--bm-ease-out),
+    border-color var(--bm-dur-slow) var(--bm-ease-out);
+}
+body[data-brand='visual'] .fn-card:hover,
+body[data-brand='visual'] .biz-card:hover,
+body[data-brand='visual'] .biz-row:hover,
+body[data-brand='visual'] .proj-card:hover,
+body[data-brand='visual'] .comp-card:hover,
+body[data-brand='visual'] .fee-card:hover,
+body[data-brand='visual'] .rc-card:hover,
+body[data-brand='visual'] .fav-card:hover,
+body[data-brand='visual'] .src-card:hover,
+body[data-brand='visual'] .board-card:hover,
+body[data-brand='visual'] .task-card:hover,
+body[data-brand='visual'] .qualify-card:hover,
+body[data-brand='visual'] .rag-card:hover,
+body[data-brand='visual'] .op-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--bm-shadow-hover) !important;
+  border-color: color-mix(in srgb, var(--bm-brand) 38%, transparent) !important;
+}
+
+/* ===== 16) 看板配额大数字 / 迷你指标：品牌色强调（不做渐变文字，保清晰） ===== */
+body[data-brand='visual'] .q-num {
+  color: var(--bm-brand);
+}
+
+/* ===== 17) 表格：表头淡渐变 tint + 行 hover 品牌微亮 + 容器圆角 ===== */
+body[data-brand='visual'] .arco-table-container {
+  border-radius: 12px;
+}
+body[data-brand='visual'] .arco-table-th {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bm-brand) 7%, var(--bm-fill-light)),
+    var(--bm-fill-light)
+  ) !important;
+  color: var(--bm-text-2);
+  font-weight: 600;
+}
+body[data-brand='visual'] .arco-table-tr:hover .arco-table-td {
+  background-color: color-mix(in srgb, var(--bm-brand) 6%, transparent) !important;
+}
+
+/* ===== 18) 表单控件：品牌渐变焦点环 + 圆角 + hover 细边 ===== */
+body[data-brand='visual'] .arco-input-wrapper,
+body[data-brand='visual'] .arco-select-view,
+body[data-brand='visual'] .arco-textarea-wrapper,
+body[data-brand='visual'] .arco-input-number,
+body[data-brand='visual'] .arco-picker {
+  border-radius: 10px;
+}
+body[data-brand='visual'] .arco-input-wrapper:focus-within,
+body[data-brand='visual'] .arco-select-view:focus-within,
+body[data-brand='visual'] .arco-textarea-wrapper:focus-within,
+body[data-brand='visual'] .arco-picker:focus-within {
+  border-color: var(--bm-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bm-brand) 20%, transparent);
+}
+body[data-brand='visual']
+  .arco-input-wrapper:not(.arco-input-wrapper-disabled):not(.arco-input-wrapper-error):hover,
+body[data-brand='visual']
+  .arco-select-view:not(.arco-select-view-disabled):not(.arco-select-view-error):hover {
+  border-color: color-mix(in srgb, var(--bm-brand) 42%, var(--bm-border));
+}
+
+/* ===== 19) 浮层：下拉 / 选择 / 气泡 / 日期面板 圆角 + 柔阴影；消息/通知 圆角 ===== */
+body[data-brand='visual'] .arco-dropdown,
+body[data-brand='visual'] .arco-select-dropdown,
+body[data-brand='visual'] .arco-popover-popup-content,
+body[data-brand='visual'] .arco-picker-container {
+  border: 1px solid color-mix(in srgb, var(--bm-brand) 12%, var(--bm-border));
+  border-radius: 12px;
+  box-shadow: var(--bm-shadow-popup);
+}
+body[data-brand='visual'] .arco-popover-popup-content {
+  overflow: hidden;
+}
+body[data-brand='visual'] .arco-message,
+body[data-brand='visual'] .arco-notification {
+  border-radius: 12px;
+}
+
+/* ===== 20) 收尾：分页 / 骨架屏 / Tabs 墨条 / 步骤条 / 折叠 / 时间轴 ===== */
+/* 分页：圆角 + hover 品牌淡底（选中已随色板渐变外的品牌色） */
+body[data-brand='visual'] .arco-pagination-item {
+  border-radius: 8px;
+}
+body[data-brand='visual'] .arco-pagination-item:not(.arco-pagination-item-active):hover {
+  background-color: color-mix(in srgb, var(--bm-brand) 10%, transparent);
+  color: var(--bm-brand);
+}
+body[data-brand='visual'] .arco-pagination-item-active {
+  background-image: var(--bm-grad-strong);
+  border-color: transparent;
+  color: #fff;
+}
+/* 骨架屏：品牌微光扫过 */
+body[data-brand='visual'] .arco-skeleton-animate .arco-skeleton-line-row,
+body[data-brand='visual'] .arco-skeleton-animate .arco-skeleton-shape {
+  background: linear-gradient(
+    90deg,
+    var(--bm-fill-light) 25%,
+    color-mix(in srgb, var(--bm-brand) 12%, var(--bm-fill-light)) 37%,
+    var(--bm-fill-light) 63%
+  );
+  background-size: 400% 100%;
+}
+/* Tabs 底部墨条：渐变 */
+body[data-brand='visual'] .arco-tabs-nav-ink {
+  background: var(--bm-grad) !important;
+}
+/* 折叠面板圆角对齐 */
+body[data-brand='visual'] .arco-collapse,
+body[data-brand='visual'] .arco-collapse-item-content {
+  border-radius: 12px;
+}
+/* 当前步骤标题加重（圆点/连线已随品牌色） */
+body[data-brand='visual'] .arco-steps-item-active .arco-steps-item-title {
+  font-weight: 600;
+}
+
+/* ===== 21) 迷你折线图 draw-in：KPI 卡里的 Sparkline 折线「画」出来，面积淡入 =====
+ * 纯 CSS，只在视觉体验版生效；dasharray 取够大以覆盖最长折线（平台趋势宽 520）。 */
+@keyframes vx-spark-draw {
+  from {
+    stroke-dashoffset: 640;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes vx-spark-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+body[data-brand='visual'] .spark .spark-line {
+  stroke-dasharray: 640;
+  animation: vx-spark-draw 1.1s var(--bm-ease) both;
+}
+body[data-brand='visual'] .spark .spark-area {
+  animation: vx-spark-fade 1s ease 0.3s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-brand='visual'] .spark .spark-line,
+  body[data-brand='visual'] .spark .spark-area {
+    animation: none;
+  }
+}
+
+/* ===== 22) 登录页：品牌门面换成靛→紫→青招牌渐变 + 水晶 logo + 渐变特性点 =====
+ * 登录页样式是组件 scoped（.login-brand[data-v-*]，特异度 0-2-0），
+ * body[data-brand='visual'] .login-brand（0-2-1）可稳定压过，无需 !important。
+ * 首屏就把「视觉体验版」的招牌色打出来，客户开屏即定印象。 */
+body[data-brand='visual'] .login-brand {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.2) 0, transparent 34%),
+    radial-gradient(circle at 82% 78%, rgba(6, 182, 212, 0.28) 0, transparent 42%),
+    linear-gradient(135deg, #4f46e5 0%, #6366f1 40%, #8b5cf6 72%, #06b6d4 118%);
+}
+/* logo 底托做成半透明玻璃 + 受光高光 */
+body[data-brand='visual'] .login-brand .brand-logo-img {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 6px 16px -6px rgba(0, 0, 0, 0.3);
+}
+/* 特性点：从纯白点换成青色高亮，呼应右下角青光 */
+body[data-brand='visual'] .login-brand .brand-features .dot {
+  background: #7ef0ff;
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(126, 240, 255, 0.8);
+}
+/* 移动端小屏页面底也带一层淡靛光 */
+@media (max-width: 1023px) {
+  body[data-brand='visual'] .login-page {
+    background:
+      radial-gradient(circle at 50% 0, rgba(99, 102, 241, 0.12) 0, transparent 52%),
+      var(--bm-bg-page, #f4f5fd);
+  }
+}
+
+/* ===== 23) 报告页标题竖条：沿用组件自带的 .title-bar，只把颜色换成招牌渐变 =====
+ * 这些区块标题大多自带 icon / 竖条标记，再叠加统一 ::before 会出现「双标记」，
+ * 所以只重着色，不加新元素。 */
+body[data-brand='visual'] .report-title .title-bar {
+  background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 60%, #06b6d4 130%);
+}
+
+/* ===== 24) 抽屉/报告 hero 头：渐变洗色 ===== */
+body[data-brand='visual'] .report-header,
+body[data-brand='visual'] .dv-header,
+body[data-brand='visual'] .ai-head {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--bm-brand) 7%, transparent),
+    transparent 60%
+  );
+}
+
+/* ===== 25) 收尾细节 ===== */
+/* 头像（首字母底色）：品牌渐变，比纯色更有质感。
+   首字母必须显式压成白色：Arco 暗色主题下头像文字是深墨(rgb(23,23,26))，
+   落在这块渐变上实测 4.21，比亮色下的白字还差。 */
+body[data-brand='visual'] .arco-avatar {
+  background-image: var(--bm-grad-strong);
+  color: #fff;
+}
+/* 头像里若是真实图片则不需要渐变底，交回透明 */
+body[data-brand='visual'] .arco-avatar-image {
+  background-image: none;
+}
+/* 空状态图标：品牌淡色 + 轻微放大，柔和不空洞 */
+body[data-brand='visual'] .arco-empty-image {
+  color: color-mix(in srgb, var(--bm-brand) 55%, var(--bm-text-4, #c9cdd4));
+}
+/* outline / 次级按钮 hover：浮现品牌渐变淡底 + 上浮 */
+body[data-brand='visual'] .arco-btn-outline:not(.arco-btn-disabled):hover,
+body[data-brand='visual'] .arco-btn-secondary:not(.arco-btn-disabled):hover {
+  background-image: var(--bm-grad-soft);
+  transform: translateY(-1px);
+}
+/* 开关选中：渐变轨道（可能带 checked-text 白字，同样走 -strong） */
+body[data-brand='visual'] .arco-switch-checked {
+  background-image: var(--bm-grad-strong);
+}
+/* 徽标 / 圆点：渐变（角标数字是 11px 白字） */
+body[data-brand='visual'] .arco-badge-number,
+body[data-brand='visual'] .arco-badge-dot {
+  background-image: var(--bm-grad-strong);
+}

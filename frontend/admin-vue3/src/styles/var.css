@@ -1,0 +1,71 @@
+:root {
+  --login-bg-color: #293146;
+
+  /* === 侧栏（Arco Pro 浅色） === */
+  --left-menu-max-width: 220px;
+  --left-menu-min-width: 60px;
+  --left-menu-border-color: #e5e6eb;
+  --left-menu-bg-color: #ffffff;
+  --left-menu-bg-light-color: #f7f8fa;
+  --left-menu-bg-active-color: #e8f3ff;
+  --left-menu-collapse-bg-active-color: #e8f3ff;
+  --left-menu-text-color: #4e5969;
+  --left-menu-text-active-color: #165dff;
+
+  /* === Logo === */
+  --logo-height: 60px;
+  --logo-title-text-color: #1d2129;
+  --logo-border-color: #e5e6eb;
+
+  /* === 顶栏 === */
+  --top-header-bg-color: #ffffff;
+  --top-header-text-color: #1d2129;
+  --top-header-hover-color: #f2f3f5;
+  --top-tool-border-color: #e5e6eb;
+  --top-tool-height: 60px;
+  --top-tool-p-x: 16px;
+  --tags-view-height: 36px;
+
+  /* === Tab Menu === */
+  --tab-menu-max-width: 80px;
+  --tab-menu-min-width: 30px;
+  --tab-menu-collapse-height: 36px;
+
+  /* === 内容区 === */
+  --app-content-padding: 16px;
+  --app-content-bg-color: #f7f8fa;
+  --app-footer-height: 50px;
+
+  --transition-time-02: 0.2s;
+}
+
+.dark {
+  --app-content-bg-color: var(--bm-bg-card);
+  --left-menu-bg-color: #17171a;
+  --left-menu-bg-light-color: #232324;
+  --left-menu-bg-active-color: #1f2c4d;
+  --left-menu-collapse-bg-active-color: #1f2c4d;
+  --left-menu-text-color: #c9cdd4;
+  --left-menu-text-active-color: #4080ff;
+  --left-menu-border-color: #2a2a2d;
+  --logo-title-text-color: #f7f8fa;
+  --logo-border-color: #2a2a2d;
+  --top-header-bg-color: #17171a;
+  --top-header-text-color: #f7f8fa;
+  --top-header-hover-color: #232324;
+  --top-tool-border-color: #2a2a2d;
+}
+
+html,
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+:after,
+:before {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}

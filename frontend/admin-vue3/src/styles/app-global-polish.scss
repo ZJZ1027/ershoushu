@@ -1,0 +1,824 @@
+/* ============================================================
+ * 全局视觉细节：不属于任何单个页面的全站样式基线 ——
+ * 内容区背景、文本选中高亮、表格单元通用类、语义色与对比度修正、
+ * 细滚动条、浮层阴影、模态与表格基线、动效与无障碍降级。
+ * ============================================================ */
+
+/* ===== App 主体内容区背景 ===== */
+.app-main,
+.v-app-view {
+  background-color: var(--app-content-bg-color, #f7f8fa);
+}
+
+/* ===== 品牌色文本选中高亮（顶级产品通用细节：Linear / Vercel / Stripe） =====
+ * 默认浏览器选中是刺眼的系统蓝，这里换成品牌色淡色调，文字保持原色可读。 */
+::selection {
+  background: color-mix(in srgb, var(--bm-brand, #165dff) 22%, transparent);
+}
+::-moz-selection {
+  background: color-mix(in srgb, var(--bm-brand, #165dff) 22%, transparent);
+}
+
+/* ===== 表格单元的三种通用写法 =====
+ * 反模式：列按数据库字段一一铺开，实际数据大多为空，于是整列都是破折号——
+ * 既占宽度又制造噪音。约定：
+ *   .bm-cell-main  行主文本（一行截断）
+ *   .bm-cell-sub   主文本下方的次要信息（编号/机关/来源…），**有值才渲染**，不占位
+ *   .bm-cell-empty 确实要显示的空值，统一 `—` 且降到最弱一档，不与真实数据抢注意力
+ *   .bm-cell-num   金额/日期等数字，等宽数位以便逐列对齐（默认比例数字会让小数点参差）
+ * 前缀 bm- 是为了不和各页面已有的 .cell-* scoped 类撞名。
+ */
+.bm-cell-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bm-text-1, #1d2129);
+}
+.bm-cell-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--bm-text-3, #86909c);
+}
+.bm-cell-sub em {
+  font-style: normal;
+  color: var(--bm-text-4, #c9cdd4);
+}
+.bm-cell-empty {
+  /* 原来用最弱的 text-4（白底 1.59:1），破折号几乎看不见——「看不见的占位符」
+     比不放占位符更糟：一列全空时看起来像渲染坏了。降一档到次要色，仍明显弱于真实数据。 */
+  color: var(--bm-text-3);
+}
+.bm-cell-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* 时间戳一律不许断行。Arco 表格在列被压窄时会让文字换行，
+   于是出现「2026-07-28 16:5 / 0:32」这种把秒切两半的显示；nowrap 后至多截断，不会读错时间。 */
+.arco-table-td .cell-time,
+.arco-table-td .bm-cell-time {
+  display: inline-block;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 全局「启用/禁用」状态：安静的彩点 + 文字（取代满屏饱和绿标签） =====
+ * 反模式：表格「状态」列每行都挂一个饱和绿「启用」a-tag，一整列刺眼且零信息量。
+ * 顶级做法：默认态安静——禁用=灰点灰字，启用=只亮一个绿点（带柔光环），
+ * 把饱和色留给真正异常/正向信号。CompanyPersonList 已用同款，这里收口成全站统一语言，
+ * 各表格/看板改用 <span class="enable-chip" :class="{ on: 启用 }"><i class="enable-dot"/>启用</span>。 */
+.enable-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bm-text-3, #86909c);
+  white-space: nowrap;
+}
+.enable-chip .enable-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bm-text-4, #c9cdd4);
+  flex-shrink: 0;
+}
+.enable-chip.on {
+  color: var(--bm-text-2, #4e5969);
+}
+.enable-chip.on .enable-dot {
+  background: var(--bm-success, #00b42a);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bm-success, #00b42a) 15%, transparent);
+}
+
+/* ===== 语义标签：淡底 + 深字（取代 Arco 默认的淡底 + 同名 -6 色字） =====
+ * Arco 的 <a-tag color="xxx"> 是「-1 淡底 + -6 饱和字」。饱和色本就是给白底描边/实心
+ * 用的，压在自家淡底上对比度很低——实测（白底卡片内，12px 正文号，AA 需 4.5:1）：
+ *   gold 1.7 · lime 1.63 · yellow 1.35 · cyan 1.97 · orange 2.41 · green 2.63 · gray 3.05 · red 3.25
+ * gold/yellow/lime 那几档已经接近看不见（本项目 gold 用在「重点/推荐」这类要被看到的标记上）。
+ * 这里按各色相实测把字色下压到刚好过线的档位（淡底不动，形状/尺寸不动），
+ * 观感上是 GitHub / Linear 那种「深色字淡色底」的徽章，比原来更清楚也更沉稳。
+ * 用 !important：Arco 按需 CSS 常晚于全局样式加载。
+ * arcoblue 跟随品牌色板（8 套主题各不相同），统一取 -7 以保证换主题后仍达标。
+ *
+ * 明暗通用：Arco 暗色会把整条色阶翻转（序号越大越亮），所以同一句 `--红-7` 在明色是深红字、
+ * 在暗色是浅红字，两边都落在自家淡底的反方向上。实测同一组档位在暗色淡底(-1)上也达标
+ * （red-7 6.96 · orange-8 9.74 · green-8 6.27 · gray-8 10.36 · purple-7 5.52），
+ * 因此不再按 body:not([arco-theme='dark']) 分叉 —— 之前分叉的结果是暗色下继续用 -6，
+ * 实测灰 3.7 / 紫 2.66 / 红 3.97 全部不达标。 */
+.arco-tag-red {
+  color: rgb(var(--red-7)) !important;
+}
+.arco-tag-blue {
+  color: rgb(var(--blue-7)) !important;
+}
+.arco-tag-pinkpurple {
+  color: rgb(var(--pinkpurple-7)) !important;
+}
+.arco-tag-arcoblue {
+  color: rgb(var(--arcoblue-7)) !important;
+}
+.arco-tag-orangered {
+  color: rgb(var(--orangered-8)) !important;
+}
+.arco-tag-orange {
+  color: rgb(var(--orange-8)) !important;
+}
+.arco-tag-green {
+  color: rgb(var(--green-8)) !important;
+}
+.arco-tag-cyan {
+  color: rgb(var(--cyan-8)) !important;
+}
+.arco-tag-magenta {
+  color: rgb(var(--magenta-8)) !important;
+}
+.arco-tag-gray {
+  color: rgb(var(--gray-8)) !important;
+}
+/* 黄系淡底本身极亮，-8 仍不足 4.5:1，再深一档 */
+.arco-tag-gold {
+  color: rgb(var(--gold-9)) !important;
+}
+.arco-tag-yellow {
+  color: rgb(var(--yellow-9)) !important;
+}
+.arco-tag-lime {
+  color: rgb(var(--lime-9)) !important;
+}
+/* purple 明色 -6 就有 5.9:1，但暗色只有 3.8，统一提到 -7（明 8.16 / 暗 5.52） */
+.arco-tag-purple {
+  color: rgb(var(--purple-7)) !important;
+}
+
+/* ===== 语义状态的「文字型」按钮 / 链接：同样别用 -6 饱和档 =====
+ * Arco 的 status="warning|danger|success" 在 text / outline 型按钮上直接用 -6 当字色，
+ * 白底实测：橙 2.57 · 绿 2.63 · 红 3.25~3.71，都够不上 4.5:1。
+ * 与标签同一套办法：字色压到实测达标的档位（明色变深、暗色自动变亮），
+ * 描边/背景不动，按钮观感不变。填充型（primary/实心）是白字压深底，不在此列。 */
+/* secondary（默认型）也在列：「导出」绿 2.63 · 「导入」橙 2.41 · 「清空」红 3.25，
+   底色是 --color-secondary(#f2f3f5) 而非纯白，实测 green-8=4.60 / orange-8=5.45 / red-7=4.89 刚好过线。 */
+/* a-link 的 status 型同理：Arco 给 status="danger" 的链接直接上 red-6，实测 3.71
+   （列表行内的「删除」链接就是这一档）。链接与文字按钮并列在这里一起压档。 */
+.arco-btn-text.arco-btn-status-warning:not(.arco-btn-disabled),
+.arco-btn-outline.arco-btn-status-warning:not(.arco-btn-disabled),
+.arco-btn-secondary.arco-btn-status-warning:not(.arco-btn-disabled),
+.arco-link.arco-link-status-warning:not(.arco-link-disabled) {
+  color: rgb(var(--orange-8));
+}
+.arco-btn-text.arco-btn-status-success:not(.arco-btn-disabled),
+.arco-btn-outline.arco-btn-status-success:not(.arco-btn-disabled),
+.arco-btn-secondary.arco-btn-status-success:not(.arco-btn-disabled),
+.arco-link.arco-link-status-success:not(.arco-link-disabled) {
+  color: rgb(var(--green-8));
+}
+.arco-btn-text.arco-btn-status-danger:not(.arco-btn-disabled),
+.arco-btn-outline.arco-btn-status-danger:not(.arco-btn-disabled),
+.arco-btn-secondary.arco-btn-status-danger:not(.arco-btn-disabled),
+.arco-link.arco-link-status-danger:not(.arco-link-disabled) {
+  color: rgb(var(--red-7));
+}
+
+/* 实心语义主按钮（type="primary" + status）：Arco 拿 -6 档当底色配白字，实测
+ * 明色下危险 3.70:1、警告 2.57:1、成功 2.42:1，暗色下更低到 1.5~2.3:1 —— 全都过不了 AA，
+ * 偏偏这三种按钮承载的是「删除 / 提交并启动分析」这类不可逆动作，最不该看不清。
+ * 解法是把底色挪到白字能站住的那一档（实测取值见下），悬浮再深一档：
+ * 破坏性动作「按下去更重」比 Arco 默认的「悬浮变浅」更符合直觉。
+ * 注意暗色下 Arco 会翻转色板（序号越小越深），所以两套要分别写。 */
+.arco-btn-primary.arco-btn-status-danger:not(.arco-btn-disabled) {
+  background-color: rgb(var(--red-7)); /* 5.43:1 */
+
+  &:hover,
+  &:active {
+    background-color: rgb(var(--red-8));
+  }
+}
+.arco-btn-primary.arco-btn-status-warning:not(.arco-btn-disabled) {
+  background-color: rgb(var(--orange-8)); /* 6.05:1 */
+
+  &:hover,
+  &:active {
+    background-color: rgb(var(--orange-9));
+  }
+}
+.arco-btn-primary.arco-btn-status-success:not(.arco-btn-disabled) {
+  background-color: rgb(var(--green-8)); /* 5.10:1 */
+
+  &:hover,
+  &:active {
+    background-color: rgb(var(--green-9));
+  }
+}
+
+body[arco-theme='dark'] {
+  .arco-btn-primary.arco-btn-status-danger:not(.arco-btn-disabled) {
+    background-color: rgb(var(--red-4)); /* 5.3:1 */
+
+    &:hover,
+    &:active {
+      background-color: rgb(var(--red-3));
+    }
+  }
+  .arco-btn-primary.arco-btn-status-warning:not(.arco-btn-disabled) {
+    background-color: rgb(var(--orange-3)); /* 5.8:1 */
+
+    &:hover,
+    &:active {
+      background-color: rgb(var(--orange-2));
+    }
+  }
+  .arco-btn-primary.arco-btn-status-success:not(.arco-btn-disabled) {
+    background-color: rgb(var(--green-3)); /* 5.1:1 */
+
+    &:hover,
+    &:active {
+      background-color: rgb(var(--green-2));
+    }
+  }
+}
+
+/* 主色文字：品牌 -6 在商务蓝白底刚好 4.62，但换到视觉体验版（靛蓝）等主题就掉到 4.47，
+ * 暗色下带浅底的激活项（分页当前页、分段控件选中项）更低到 3.1~3.6。
+ * 统一压到 -7 档，八套主题、明暗两态都稳过线。
+ * 选中的 Tab 标题也在列：实测靛蓝 4.02 / 商务蓝暗色 3.75。 */
+.arco-link.arco-link-status-normal:not(.arco-link-disabled),
+.arco-radio-button:not(.arco-radio-button-disabled).arco-radio-checked .arco-radio-button-content,
+.arco-pagination-item-active,
+.arco-tabs-tab-active .arco-tabs-tab-title,
+.arco-btn-text.arco-btn-status-normal:not(.arco-btn-disabled),
+.arco-btn-outline.arco-btn-status-normal:not(.arco-btn-disabled) {
+  color: rgb(var(--primary-7));
+}
+
+/* ===== 禁用态：弱化，但不要弱到读不出字 =====
+ * Arco 的禁用文字挂 --color-text-4（白底 1.59:1）。WCAG 确实豁免失效控件，但实测下来
+ * 「转项目」「仅看收藏」这些禁用按钮/勾选的标签几乎完全看不见 —— 用户看到一个点不动的
+ * 灰块，连它本来是干什么的都读不出来，无法判断要满足什么条件才能用。
+ * 提到 text-3 档（3.05:1）：与启用态（5~7:1）仍有明显轻重差，不会误认成可点，但能读。 */
+/* 只管「无底色」的那几型：文字 / 描边 / 次要 / 虚线。
+   实心型（primary 等）禁用态是「白字 + 淡色填充」，那是公认可辨的失效样式，动它反而变丑。 */
+.arco-btn-text.arco-btn-disabled,
+.arco-btn-outline.arco-btn-disabled,
+.arco-btn-secondary.arco-btn-disabled,
+.arco-btn-dashed.arco-btn-disabled,
+.arco-checkbox-disabled .arco-checkbox-label,
+.arco-radio-disabled .arco-radio-label,
+.arco-link.arco-link-disabled {
+  /* !important：Arco 对「主色文字按钮 + 禁用」有更具体的规则（--primary-3，实测 1.88:1），
+     不加会被它盖回去。取 --bm-text-3 而非 Arco 的 text-3，顺带把这一档也拉到 AA 之上。 */
+  color: var(--bm-text-3) !important;
+}
+
+/* ===== Arco 自带的几处「说明文字」也吃了 text-3(#86909c, 3.24:1) =====
+ * 分页的「前往 / 页」「共 N 条」、日期区间的连接符，都是要读的文字（不是纯装饰），
+ * 统一换成本项目达标的次要档。分隔符那条 Arco 有更具体的规则，需要 !important。 */
+.arco-pagination-jumper-prepend,
+.arco-pagination-jumper-append,
+.arco-pagination-jumper-text-goto,
+.arco-pagination-total {
+  color: var(--bm-text-3);
+}
+.arco-picker-separator {
+  color: var(--bm-text-3) !important;
+}
+
+/* ===== 嵌套空态基线（面板 / 抽屉 / 看板列里的 a-empty） =====
+ * Arco 默认是「40px 灰托盘 + 14px #a9aeb8 文字 + padding 10px 0」，三处都不合用：
+ * 灰 #a9aeb8 在白底只有 2.3:1（读不清）；14px 与正文同号，把一句「暂无数据」抬到和内容同权重；
+ * 10px 内距太挤 —— 于是全站十几处各自补 `style="padding: 24px 0"` 或 .panel-empty /
+ * .kanban-empty / .table-empty / .col-empty…同一件事写了七遍，值还各不相同（20/28/40/48）。
+ * 这里一处收口成三档：默认(紧凑) / .bm-empty-roomy(看板、整块面板) / .bm-empty-tight(拖拽提示)。
+ *
+ * 托盘图标一律隐掉：同一屏能同时出现四个一模一样的灰托盘（首页面板就是），重复且不给信息；
+ * 图形语言留给主流程首触空态的原创插画（见 EmptyState / EmptyArt），层级才拉得开。
+ * 用 :has 只认 Arco 自带那支 icon-empty，自定义 #image 插槽（如资历建议抽屉的机器人）不受影响。 */
+.arco-empty {
+  padding: 26px 16px;
+
+  .arco-empty-image:has(> .arco-icon-empty) {
+    display: none;
+  }
+
+  .arco-empty-description {
+    max-width: 320px;
+    margin: 0 auto;
+    font-size: var(--bm-fs-xs);
+    line-height: var(--bm-lh-body);
+    color: var(--bm-text-3);
+    /* 长文案（如公告正文缺失那句）不加约束会拉满整块宽度，读起来要横扫一行 */
+    text-wrap: balance;
+  }
+
+  /* 整块面板 / 看板：给自己一个最小高度并居中，那一行字才落在视觉中线上，
+     不会贴在面板上三分之一、下面吊着一大片空白。
+     min-height 而不是 height:100% —— 面板里这层容器常是 grid/block（如首页 .svc-grid），
+     撑满得逐个改父级；140px 与原先「托盘 + 文字 + 48px 内距」的占位高度也基本持平。
+     父级恰好是 flex 列时 flex:1 会接着把余高吃掉，是加分项不是前提。 */
+  &.bm-empty-roomy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    padding: 24px 16px;
+  }
+
+  /* 看板列的「拖拽到此」是操作提示不是结论，压到最小号；
+     但仍是要读的字，所以只降字号不降色（原来那层 opacity: .7 把对比度也一起打掉了） */
+  &.bm-empty-tight {
+    padding: 14px 10px;
+
+    .arco-empty-description {
+      font-size: var(--bm-fs-2xs);
+    }
+  }
+}
+
+/* ===== 阶段引导态：多步流程页的「还没开始 / 请先完成上一步」 =====
+ * 与 EmptyState 的区别：那是「没有数据」，这是「流程还没走到这一步」，所以单独一档。
+ * 图标沿用 EmptyState 那套「品牌淡底圆角块」：用最弱灰会读成「功能被禁用」，
+ * 而不是「这里接下来能做什么」。 */
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 20px;
+  text-align: center;
+
+  /* 挂在 Arco 图标(svg)上：width/height 给字形、padding 往外撑成 52px 的块。
+     必须显式 content-box —— 全局 border-box 下 1em 会连 padding 一起算，字形会被压没。 */
+  .state-icon {
+    box-sizing: content-box;
+    width: 1em;
+    height: 1em;
+    padding: 13px;
+    margin-bottom: 20px;
+    font-size: 26px;
+    color: var(--bm-brand);
+    background: var(--bm-brand-bg);
+    border-radius: var(--bm-radius-lg);
+  }
+
+  .state-title {
+    margin-bottom: 10px;
+    font-size: var(--bm-fs-lg);
+    font-weight: 600;
+    color: var(--bm-text-1);
+  }
+
+  .state-desc {
+    max-width: 460px;
+    font-size: var(--bm-fs-sm);
+    line-height: var(--bm-lh-body);
+    color: var(--bm-text-3);
+    text-wrap: balance;
+  }
+
+  .state-actions {
+    display: flex;
+    gap: var(--bm-gap);
+    margin-top: var(--bm-gap-2xl);
+  }
+
+  /* 「进错门」的场景（缺参数、对象不存在）：品牌蓝会读成「这里可以有东西」，换告警档。
+     与 EmptyState 的 tone="warning" 是同一条规矩。 */
+  &.is-warning .state-icon {
+    color: var(--bm-warning-text);
+    background: var(--bm-warning-bg);
+  }
+}
+
+/* ===== 数字角标：Arco 默认 red-6 + 白字，11~12px 下只有 3.71:1；
+ * 暗色更把字降成 90% 白（2.64:1）。未读条数 / 待办件数是要被读清的数字，
+ * 固定用深一档的红 + 纯白字（5.4:1），明暗两态同色 —— 角标本就该在两种底上都醒目。
+ * 只覆盖默认红色档：带 color/status 自定义色的角标会带上自己的 inline style，不受影响。 */
+.arco-badge-number:not([style*='background']) {
+  background-color: rgb(203, 39, 45);
+  color: #fff;
+}
+
+/* ===== 暗色专项：色板翻转后，少数「浅底 + 彩字」组合方向反了 =====
+ * 明色下 -7/-8 是压深档（对的），暗色下它们变浅、而这几处的底恰好也偏浅
+ * （分段控件选中态是 12% 白叠 8% 白；组织树的计数片是 16% 蓝再叠一层 16% 蓝），
+ * 于是字与底一起往中间挤。这里各再提一档拉开。 */
+body[arco-theme='dark'] {
+  .arco-radio-button:not(.arco-radio-button-disabled).arco-radio-checked
+    .arco-radio-button-content {
+    /* 商务蓝在暗色下 -8 实测 4.49，就差 0.01 过线；再提一档，靛蓝主题同样受益 */
+    color: rgb(var(--primary-9));
+  }
+  .arco-tag-purple {
+    color: rgb(var(--purple-8)) !important;
+  }
+  /* 蓝系同理：-7 在暗色淡蓝底上只有 4.12~4.42 */
+  .arco-tag-arcoblue {
+    color: rgb(var(--arcoblue-8)) !important;
+  }
+}
+
+/* ===== App 全局：统一滚动条样式（圆角“药丸”细滚动条） =====
+ * 圆角 thumb + 2px 透明内边（background-clip: padding-box）使滑块与边缘留缝、悬浮感；
+ * 隐藏两端方向按钮；轨道透明。Firefox 用 scrollbar-width/color（可继承）。
+ * 注：个别刻意隐藏滚动条的容器（如布局主滚动区 .content-scroll、弹窗/抽屉体）
+ *     自行用 scrollbar-width:none + width:0 覆盖本规则，不受影响。 */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-fill-4, #c9cdd4) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-fill-4, #c9cdd4);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+
+  &:hover {
+    background: var(--color-text-3, #86909c);
+    background-clip: padding-box;
+  }
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ===== 浮层阴影分级（对齐 Arco 四级：弹层=3级 / 模态·抽屉=4级） =====
+ * 把散落在各组件里的浮层阴影收口到设计 token：下拉 / 选择器 / 气泡 / 日期面板 等
+ * 走「弹层」档，模态框 / 抽屉走更重的「模态」档，层级越高阴影越沉。
+ * 用 !important 覆盖 Arco 组件按需 CSS 的默认阴影（其加载顺序常晚于全局样式）。 */
+.arco-dropdown,
+.arco-select-dropdown,
+.arco-popover-popup-content,
+.arco-picker-container,
+.arco-picker-range-wrapper,
+.arco-timepicker-container {
+  box-shadow: var(--bm-shadow-popup) !important;
+}
+
+.arco-modal {
+  box-shadow: var(--bm-shadow-modal) !important;
+}
+
+.arco-drawer {
+  box-shadow: var(--bm-shadow-modal) !important;
+}
+
+/* ===== 抽屉 / 模态：宽度不得超出视口 =====
+ * 全站 10 个抽屉写的是像素定宽（800 ~ 1260）。窗口比它窄时 Arco 不会夹紧，
+ * 右侧抽屉会朝左溢出到屏幕外——左边几百像素的内容直接够不着，且没有横向滚动可以救。
+ * 实测 1040 宽的抽屉在 640 视口下，左侧内容整片消失。
+ * 内联 width 优先级高于类选择器，所以用 max-width 夹（无 !important 也能生效，
+ * 因为 max-width 与 width 是两个属性，前者天然压制后者）。 */
+.arco-drawer {
+  max-width: 100vw;
+}
+/* 模态是居中的，贴死两边不好看，留一点边距 */
+.arco-modal {
+  max-width: calc(100vw - 32px);
+}
+
+/* ===== 模态框基线：把「Arco 默认弹窗」拉到与全站卡片同一套语言 =====
+ * 现状：标题居中、圆角 4px、内距 20px、分隔线用 --color-neutral-3（偏重），
+ * 与全站左对齐标题 + var(--bm-radius) 圆角 + hairline 分隔的卡片/抽屉观感割裂——
+ * 一眼就是「没调过的组件库默认值」。这里统一收口，40+ 个弹窗一次受益。
+ * 例外：.arco-modal-simple（Modal.confirm / useMessage 的确认框）保持 Arco 的居中简版，
+ * 那是它自己的设计意图，改了反而怪。 */
+/* 全屏模态排除在外：铺满视口的面板再加圆角和边框，四角会露出底层背景的月牙 */
+.arco-modal:not(.arco-modal-simple):not(.arco-modal-fullscreen) {
+  overflow: hidden; /* 让圆角裁掉 header/footer 的分隔线，否则两端会露出直角小尖 */
+  border: 1px solid var(--bm-border-light);
+  border-radius: var(--bm-radius, 10px);
+
+  .arco-modal-header {
+    height: 52px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--bm-border-light);
+  }
+
+  /* 标题左对齐：与页面标题、抽屉标题、卡片标题一致的阅读起点。
+     注意 Arco 的 title-align 默认值 'center' 会实打实往 DOM 上加
+     .arco-modal-title-align-center，所以必须连它一起压，光写
+     :not(.arco-modal-title-align-center) 会把所有默认弹窗都漏掉。
+     全站已有 5 处手写 title-align="start"（Dialog 组件、菜单搜索、新手指引…），
+     说明左对齐本来就是本项目的意图，这里把它变成默认。 */
+  .arco-modal-header .arco-modal-title,
+  .arco-modal-header .arco-modal-title-align-center {
+    justify-content: flex-start;
+  }
+
+  .arco-modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .arco-modal-body {
+    padding: 22px 24px;
+  }
+
+  .arco-modal-footer {
+    padding: 14px 24px;
+    border-top: 1px solid var(--bm-border-light);
+  }
+}
+
+/* 确认框（Modal.confirm / useMessage）保留 Arco 的居中简版布局，只对齐外形与间距：
+   圆角/描边跟随 token，图标与标题作为一行、正文左对齐到标题的起点，
+   否则「一段居中的短句 + 一枚居中图标」在暗色下很像系统弹窗而不是产品自己的界面。 */
+.arco-modal-simple {
+  width: 400px;
+  padding: 24px 26px 22px;
+  border: 1px solid var(--bm-border-light);
+  border-radius: var(--bm-radius, 10px);
+
+  .arco-modal-header {
+    margin-bottom: 12px;
+  }
+  .arco-modal-title {
+    justify-content: flex-start;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .arco-modal-body {
+    /* 与标题文字左边缘对齐：图标 18px + 10px 间距 */
+    padding-left: 28px;
+    color: var(--bm-text-2);
+    line-height: 1.6;
+  }
+  .arco-modal-footer {
+    margin-top: 22px;
+    text-align: right;
+  }
+}
+
+/* 遮罩：Arco 默认 rgba(29,33,41,0.6) 压得很死，弹窗像贴在黑板上。
+   淡一档 + 极轻模糊，聚焦感更好也更贵气（Linear 主题已单独这么做，这里推到全站）。 */
+.arco-modal-mask,
+.arco-drawer-mask {
+  background-color: rgba(20, 22, 28, 0.45) !important;
+  backdrop-filter: blur(2px);
+}
+
+/* ===== 全局表格基线：白底轻表头 + hairline 行分隔 + 无框通透 =====
+ * 此前「白底轻表头」在 10+ 个列表页逐页复制，详情子表/抽屉表又是另一套灰底重表头，
+ * 两套观感并存。这里收口成唯一基线（各页重复覆盖已删）：
+ *   - 表头：白底（卡片底色）、13px 灰字、底部一条 --bm-border 分隔
+ *   - 行：仅保留 --bm-border-light hairline 水平分隔，无竖向网格
+ *   - 外框：默认去掉（贴卡片容器的通透风）；bordered="{cell:true}" 的网格表保留
+ * 特异度刻意与 arco.css 对应规则持平（本文件在 arco.css 之后加载，同特异度即覆盖），
+ * 页面 scoped :deep() 覆盖（密度/行高等）加载更晚，仍可按页微调。
+ * Linear 主题在 linear-enhance.scss 以 body[data-brand] 更高特异度改仪表盘风，不受影响。
+ * 悬停不在此覆盖：Arco 默认 hover（--color-fill-1 整行淡灰）即目标效果。 */
+.arco-table .arco-table-th {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bm-text-3, #86909c);
+  background-color: var(--bm-bg-card, #fff);
+  border-bottom: 1px solid var(--bm-border, #e5e6eb);
+}
+
+/* bordered 表格的表头底边由更高特异度规则绘制，跟随收口到 token */
+.arco-table-border .arco-table-tr .arco-table-th {
+  border-bottom: 1px solid var(--bm-border, #e5e6eb);
+}
+
+.arco-table .arco-table-td {
+  border-bottom: 1px solid var(--bm-border-light, #f2f3f5);
+}
+
+/* 默认去外框（a-table 默认 bordered=true 会画容器边）；cell 网格表保留完整边框。
+ * 注意：arco.css 里存在同选择器的 border-right 规则，特异度持平时胜负取决于样式表
+ * 加载顺序（dev 下 arco.css 反而更晚），曾导致所有表格右缘残留一条贯穿竖线。
+ * 这里多写一个 .arco-table 提一级特异度，无论加载顺序如何都稳定覆盖。 */
+.arco-table.arco-table-border:not(.arco-table-border-cell) .arco-table-container {
+  border: none;
+}
+
+.arco-table.arco-table-border:not(.arco-table-border-cell) .arco-table-scroll-y {
+  border-bottom: none;
+}
+
+/* ===== 卡片入场 stagger：容器加 .bm-stagger，直接子元素依次淡入上浮 =====
+ * 用于看板卡片 / 统计卡 / 卡片行列表等「一屏多卡」场景：整屏同时闪现 → 波次浮现。
+ * 只动 opacity/transform；both 保证 delay 期间保持初始隐藏；超过 16 个子元素不再加梯次
+ * （delay 0 立即入场），避免长列表尾部等待。分页/筛选重渲染时新节点会轻播一次，属预期。 */
+@keyframes bm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bm-stagger > * {
+  animation: bm-fade-up var(--bm-dur-enter) var(--bm-ease-out) both;
+}
+
+@for $i from 2 through 16 {
+  .bm-stagger > *:nth-child(#{$i}) {
+    animation-delay: #{($i - 1) * 40}ms;
+  }
+}
+
+/* ===== 动效基线 =====
+ * 只做两件事：把最高频的两类交互（按钮态、表格行悬停）钉在 --bm-dur-fast 上，
+ * 以及提供唯一一个「悬停上浮」实现 .bm-lift。
+ * 此前各页面各写一遍上浮（位移 -1~-4px、时长 0.15~0.4s 不等），同一个动作在不同页面手感不同；
+ * 新代码需要上浮时加 .bm-lift，不要再在组件里另写一份。
+ * ⚠ 不去覆写 Arco 弹层（modal / drawer / dropdown）的过渡：它们由 JS 过渡钩子控制时长，
+ *   只改 CSS 会出现动画没播完就被移除的闪断。 */
+.arco-btn {
+  transition:
+    background-color var(--bm-dur-fast) var(--bm-ease-out),
+    border-color var(--bm-dur-fast) var(--bm-ease-out),
+    color var(--bm-dur-fast) var(--bm-ease-out),
+    box-shadow var(--bm-dur-fast) var(--bm-ease-out);
+}
+
+.arco-table-td {
+  transition: background-color var(--bm-dur-fast) var(--bm-ease-out);
+}
+
+.bm-lift {
+  transition:
+    transform var(--bm-dur) var(--bm-ease-out),
+    box-shadow var(--bm-dur) var(--bm-ease-out),
+    border-color var(--bm-dur) var(--bm-ease-out);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--bm-shadow-hover);
+  }
+  /* 按下时回落到原位：给出「按到了」的触感，也避免松手瞬间的跳动 */
+  &:active {
+    transform: translateY(0);
+    transition-duration: var(--bm-dur-fast);
+  }
+}
+
+/* ===== 无障碍：系统开启「减弱动态效果」时全局关动画/过渡 ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== 主按钮「精致实心」：品牌蓝微渐变 + 柔和蓝投影 + 圆角 =====
+ * 只作用于常规蓝色主按钮；warning / danger / success 状态主按钮与禁用态保持原样，
+ * 避免蓝色投影漏到语义色按钮上。上浅→品牌→下深的微渐变制造光泽与立体感，
+ * 柔和蓝投影让主 CTA「浮起」但不过分喧宾夺主。arco.css 先于本文件加载，同特异度即可覆盖。
+ * 例外：置于彩色背景上的按钮（如首页渐变卡的白色 CTA）在其组件内用 !important 自行保底。
+ *
+ * ⚠ 光泽不能再靠「更浅的品牌档」来做。原先三档是 brand-hover→brand→brand-active，
+ * 亮色下 0% 端压白字只有 3.65，暗色下 Arco 把色阶整条翻转（序号越大越亮），
+ * 三档变成 4.93→3.28→2.58，按钮中心实测 3.34 —— 全站最显眼的 CTA 反倒是最差的一处。
+ * 改成「实心档打底 + 一层白色高光」：底色恒定用 --bm-brand-solid（亮 -7 / 暗 -4，白字 7.7），
+ * 高光只是 18% 白叠加，最亮的左上角实测 5.48，全程都在 4.5 以上，且明暗都成立。 */
+.arco-btn.arco-btn-primary:not(.arco-btn-status-warning):not(.arco-btn-status-danger):not(
+    .arco-btn-status-success
+  ):not(.arco-btn-disabled) {
+  border-color: transparent;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 55%),
+    var(--bm-brand-solid);
+  box-shadow: 0 4px 12px -5px color-mix(in srgb, var(--bm-brand) 60%, transparent);
+  transition:
+    box-shadow var(--bm-dur) var(--bm-ease-out),
+    transform var(--bm-dur) var(--bm-ease-out),
+    filter var(--bm-dur) var(--bm-ease-out);
+
+  &:hover {
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+    box-shadow: 0 7px 18px -6px color-mix(in srgb, var(--bm-brand) 66%, transparent);
+  }
+  &:active {
+    filter: brightness(0.97);
+    transform: translateY(0);
+    box-shadow: 0 3px 9px -5px color-mix(in srgb, var(--bm-brand) 60%, transparent);
+  }
+}
+
+/* ===== Linear 借鉴：主按钮改「纯色扁平」 =====
+ * Linear 的主 CTA 是纯色 + 极轻投影、无渐变无位移。body[data-brand='linear'] 前缀
+ * 特异度高于上面的渐变规则，故仅在 Linear 风格下生效；商务蓝保持原渐变质感。 */
+body[data-brand='linear']
+  .arco-btn.arco-btn-primary:not(.arco-btn-status-warning):not(.arco-btn-status-danger):not(
+    .arco-btn-status-success
+  ):not(.arco-btn-disabled) {
+  /* 纯色扁平照旧，但底色取实心档。--bm-brand 是 -6：亮色下白字 4.7 勉强、暗色下色阶翻转
+     只剩 3.3（和上面那条渐变按钮同一个病，只是 Linear 这套品牌不在体检覆盖的四套里，
+     一直没被扫出来）。hover/active 也不能再用 -hover/-active，那两档同样会在暗色翻亮，
+     改成从实心档就地提亮/压暗，明暗两态都稳。 */
+  background: var(--bm-brand-solid);
+  box-shadow: none;
+
+  &:hover {
+    filter: none;
+    transform: none;
+    background: color-mix(in srgb, var(--bm-brand-solid) 90%, #fff);
+    box-shadow: 0 1px 2px rgba(16, 17, 26, 0.14);
+  }
+  &:active {
+    filter: none;
+    transform: none;
+    background: color-mix(in srgb, var(--bm-brand-solid) 90%, #000);
+    box-shadow: none;
+  }
+}
+
+/* ===== 树形/可展开表格：展开钮由「带框 +/−」改为「简洁 chevron」 =====
+ * Arco 默认树表展开钮是 <button.arco-table-expand-btn> 内嵌 IconPlus/IconMinus，
+ * 是带边框的方块加减号，观感陈旧。这里全局替换（覆盖菜单/部门等所有树表，无需逐页改）：
+ *   - 按钮去边框、透明底，悬停浅灰底 + 品牌色；
+ *   - 隐藏原生 +/− 图标，用纯 CSS 画一个「右向箭头」（折叠态），展开时旋转到「朝下」。
+ * 展开态判定：Arco 展开时渲染 IconMinus(.arco-icon-minus)、折叠时 IconPlus(.arco-icon-plus)，
+ * 用 :has() 区分（内网后台，现代浏览器均支持）。多写一个 .arco-table 提特异度，
+ * 无论 arco.css 加载先后都稳定覆盖。 */
+/* 注：Arco 默认对本按钮就是 `.arco-table .arco-table-expand-btn`（同特异度），且带常驻灰底
+ * background-color:var(--color-neutral-3) + border。dev 下 arco.css 后加载会盖回来，
+ * 故对「与 Arco 冲突」的属性（尺寸/底色/边框）加 !important 稳定覆盖；::before/svg 无冲突不加。 */
+.arco-table .arco-table-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background-color: transparent !important; /* 去掉常驻灰框 */
+  color: var(--bm-text-3, #86909c) !important;
+  cursor: pointer;
+  transition:
+    background-color var(--bm-dur-fast) var(--bm-ease-out),
+    color var(--bm-dur-fast) var(--bm-ease-out);
+
+  &:hover {
+    background-color: var(--color-fill-2, #f2f3f5) !important; /* 仅悬停显一层淡底 */
+    color: var(--bm-brand, #165dff) !important;
+  }
+
+  /* 隐藏原生 +/− 图标（含全局 stroke-width 加粗后的描边） */
+  > svg {
+    display: none;
+  }
+
+  /* 纯 CSS chevron：取正方形的右、下两条边旋转 -45° 成右向箭头（折叠态）。
+   * 只用 rotate、绕中心旋转，几何上左右等距、严格居中。 */
+  &::before {
+    content: '';
+    box-sizing: border-box;
+    width: 6.5px;
+    height: 6.5px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    border-radius: 2px;
+    transform: rotate(-45deg);
+    transition: transform var(--bm-dur) var(--bm-ease-out);
+  }
+
+  /* 展开态（渲染 IconMinus）：箭头转到「朝下」 */
+  &:has(> svg.arco-icon-minus)::before {
+    transform: rotate(45deg);
+  }
+}
+
+/* ===== Arco 线框图标「发虚」修正 =====
+ * Arco Icon 是 48×48 viewBox + stroke-width=4 的描边 SVG。缩到 14~16px 时，
+ * 有效描边约 1.3px，在 Windows 1x 屏上抗锯齿会抹成灰边，看起来发虚。
+ * 描边略加粗（4→5）+ 圆角线帽，观感更实，又不至于变成粗黑块。 */
+.arco-icon {
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  shape-rendering: geometricPrecision;
+}

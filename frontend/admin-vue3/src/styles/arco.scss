@@ -1,0 +1,64 @@
+// Arco Design Vue 主题定制：将主色调统一为 Arco 经典蓝 #165DFF
+// 通过 CSS 变量覆盖，避开 less 编译以减少构建时间
+// 参考：https://arco.design/vue/docs/theme
+
+// ===== 浅色模式 =====
+:root {
+  // Arco 蓝（主品牌色）—— 阶梯 1 ~ 10
+  --arcoblue-1: 232, 243, 255;
+  --arcoblue-2: 190, 218, 255;
+  --arcoblue-3: 148, 191, 255;
+  --arcoblue-4: 106, 161, 255;
+  --arcoblue-5: 77, 138, 255;
+  --arcoblue-6: 22, 93, 255; // 主色 #165DFF
+  --arcoblue-7: 14, 66, 210;
+  --arcoblue-8: 6, 44, 166;
+  --arcoblue-9: 2, 26, 122;
+  --arcoblue-10: 0, 13, 77;
+
+  // 触发器：让 .arco-design 整体取这套蓝
+  --primary-1: var(--arcoblue-1);
+  --primary-2: var(--arcoblue-2);
+  --primary-3: var(--arcoblue-3);
+  --primary-4: var(--arcoblue-4);
+  --primary-5: var(--arcoblue-5);
+  --primary-6: var(--arcoblue-6);
+  --primary-7: var(--arcoblue-7);
+  --primary-8: var(--arcoblue-8);
+  --primary-9: var(--arcoblue-9);
+  --primary-10: var(--arcoblue-10);
+
+  // 圆角与字体（向 Arco Pro 看齐）
+  --border-radius-small: 2px;
+  --border-radius-medium: 4px;
+  --border-radius-large: 8px;
+}
+
+// ===== 暗黑模式 =====
+body[arco-theme='dark'] {
+  // Arco 在暗黑模式下使用相反的阶梯
+  --arcoblue-1: 0, 13, 77;
+  --arcoblue-2: 2, 26, 122;
+  --arcoblue-3: 6, 44, 166;
+  --arcoblue-4: 14, 66, 210;
+  --arcoblue-5: 22, 93, 255;
+  --arcoblue-6: 77, 138, 255;
+  --arcoblue-7: 106, 161, 255;
+  --arcoblue-8: 148, 191, 255;
+  --arcoblue-9: 190, 218, 255;
+  --arcoblue-10: 232, 243, 255;
+
+  // ===== 布局分层（向 Arco Pro 暗色看齐）=====
+  // 暗色下「页面/主体」背景改用最深的 --color-bg-1(#17171a)，让卡片(--color-bg-2 #232324)与
+  // 顶栏/侧栏浮起，形成「页面最深、卡片更浅」的层次。
+  // 原先布局用 --color-fill-2（暗色为 rgba(255,255,255,.08) 半透明浅叠加），会让页面比卡片更浅、
+  // 整体发灰、层次反转，这正是与 Arco 官网暗色的差别所在。
+  background-color: var(--color-bg-1);
+
+  .arco-app-layout,
+  .arco-app-body,
+  .arco-app-main,
+  .arco-app-content {
+    background-color: var(--color-bg-1) !important;
+  }
+}

@@ -1,0 +1,29 @@
+# Dependencies & build
+node_modules/
+dist/
+dist-ssr/
+target/
+*.iml
+
+# IDE / OS
+.idea/
+.vscode/
+.history/
+.DS_Store
+Thumbs.db
+*.log
+
+# Local secrets / overrides
+**/application-my.yml
+backend/data/
+**/data/upload/
+
+# Env with local credentials (keep .env.dev / .env.prod templates if needed)
+**/.env.local
+**/.env.*.local
+
+# Caches
+.pnpm-store/
+*.eslintcache
+.cache/
+**/node_modules/.vite/

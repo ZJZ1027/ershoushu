@@ -1,0 +1,25 @@
+@use './var.css';
+@use './theme.scss';
+@use './arco.scss';
+@use './design-tokens.scss';
+@use './app-global-polish.scss';
+@use './linear-enhance.scss';
+@use './visual-enhance.scss';
+
+/* nprogress 顶部进度条配色（Arco 主色） */
+#nprogress {
+  & .bar {
+    background-color: var(--color-primary-6) !important;
+  }
+
+  & .peg {
+    box-shadow:
+      0 0 10px var(--color-primary-6),
+      0 0 5px var(--color-primary-6) !important;
+  }
+
+  & .spinner-icon {
+    border-top-color: var(--color-primary-6);
+    border-left-color: var(--color-primary-6);
+  }
+}
