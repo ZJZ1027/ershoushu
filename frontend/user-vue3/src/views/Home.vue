@@ -1,64 +1,113 @@
 <template>
-  <div class="page home">
-    <section class="home-intro">
-      <div>
-        <p class="home-kicker">今日在售</p>
-        <h1 class="page-title">把教材交给下一位同学</h1>
-        <p class="page-sub">按书名、课程、校区筛选，校内面交更省心。</p>
+  <div class="home">
+    <section class="search-hero">
+      <div class="search-hero-inner">
+        <form class="search-bar" @submit.prevent="doSearch">
+          <input
+            v-model="query.keyword"
+            class="search-input"
+            type="search"
+            enterkeyhint="search"
+            placeholder="搜书名 / 作者 / ISBN / 课程"
+            autocomplete="off"
+            @keydown.enter.prevent="doSearch"
+          />
+          <button class="search-btn" type="submit">
+            <svg class="search-ico" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2" />
+              <path d="M16.5 16.5L21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+            </svg>
+            搜索
+          </button>
+        </form>
+        <div class="search-cats" role="list">
+          <button
+            type="button"
+            class="cat-link"
+            :class="{ active: query.categoryId == null }"
+            @click="pickCategory(undefined)"
+          >
+            全部
+          </button>
+          <button
+            v-for="c in categories"
+            :key="c.id"
+            type="button"
+            class="cat-link"
+            :class="{ active: query.categoryId === c.id }"
+            @click="pickCategory(c.id)"
+          >
+            {{ c.name }}
+          </button>
+        </div>
       </div>
-      <router-link class="home-cta" to="/publish">去发布</router-link>
     </section>
 
-    <a-alert v-if="notices[0]" type="info" class="home-notice" show-icon>
-      {{ notices[0].title }}
-    </a-alert>
+    <div class="page home-body">
+      <a-alert v-if="notices[0]" type="info" class="home-notice" show-icon>
+        {{ notices[0].title }}
+      </a-alert>
 
-    <div class="filters home-filters">
-      <a-input-search
-        v-model="query.keyword"
-        placeholder="搜书名 / 作者 / ISBN / 课程"
-        class="home-search"
-        allow-clear
-        @search="load"
-      />
-      <a-select v-model="query.categoryId" placeholder="分类" allow-clear style="width: 140px" @change="load">
-        <a-option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</a-option>
-      </a-select>
-      <a-select v-model="query.campus" placeholder="校区" allow-clear style="width: 140px" @change="load">
-        <a-option v-for="d in campuses" :key="d.value" :value="d.value">{{ d.label }}</a-option>
-      </a-select>
-      <a-select v-model="query.conditionCode" placeholder="成色" allow-clear style="width: 140px" @change="load">
-        <a-option v-for="d in conditions" :key="d.value" :value="d.value">{{ d.label }}</a-option>
-      </a-select>
-    </div>
-
-    <div class="grid">
-      <router-link v-for="b in list" :key="b.id" class="card-book" :to="'/book/' + b.id">
-        <div class="card-cover">
-          <img :src="cover(b)" alt="" />
+      <div class="home-toolbar">
+        <div class="home-toolbar-left">
+          <h2 class="home-section-title">
+            {{ listTitle }}
+          </h2>
+          <span class="home-count">共 {{ total }} 本</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">{{ b.title }}</h3>
-          <div class="price">¥{{ b.price }}</div>
-          <div class="muted">{{ b.campus || '校内面交' }} · {{ b.sellerNickname }}</div>
+        <div class="home-filters">
+          <a-select
+            v-model="query.campus"
+            placeholder="校区"
+            allow-clear
+            size="small"
+            style="width: 120px"
+            @change="onFilterChange"
+          >
+            <a-option v-for="d in campuses" :key="d.value" :value="d.value">{{ d.label }}</a-option>
+          </a-select>
+          <a-select
+            v-model="query.conditionCode"
+            placeholder="成色"
+            allow-clear
+            size="small"
+            style="width: 120px"
+            @change="onFilterChange"
+          >
+            <a-option v-for="d in conditions" :key="d.value" :value="d.value">{{ d.label }}</a-option>
+          </a-select>
+          <router-link class="home-publish" to="/publish">去发布</router-link>
         </div>
-      </router-link>
-    </div>
+      </div>
 
-    <div v-if="!list.length" class="empty-state">暂无在售书籍，换个筛选条件试试</div>
+      <div class="grid">
+        <router-link v-for="b in list" :key="b.id" class="card-book" :to="'/book/' + b.id">
+          <div class="card-cover">
+            <img :src="cover(b)" alt="" />
+          </div>
+          <div class="card-body">
+            <h3 class="card-title">{{ b.title }}</h3>
+            <div class="price">¥{{ b.price }}</div>
+            <div class="muted">{{ b.campus || '校内面交' }} · {{ b.sellerNickname }}</div>
+          </div>
+        </router-link>
+      </div>
 
-    <div class="home-pager">
-      <a-pagination
-        :total="total"
-        v-model:current="query.pageNo"
-        :page-size="query.pageSize"
-        @change="load"
-      />
+      <div v-if="!list.length" class="empty-state">暂无在售书籍，换个关键词或分类试试</div>
+
+      <div class="home-pager">
+        <a-pagination
+          :total="total"
+          v-model:current="query.pageNo"
+          :page-size="query.pageSize"
+          @change="load"
+        />
+      </div>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { getBookPage, getCategories, getDict, getNotices } from '@/api'
 import { fileUrl } from '@/api/http'
 
@@ -79,10 +128,42 @@ const notices = ref<any[]>([])
 
 const cover = (b: any) => fileUrl(b.coverUrl) || 'https://placehold.co/400x300?text=Book'
 
+const activeCategoryName = computed(() => {
+  if (query.categoryId == null) return ''
+  return categories.value.find((c) => c.id === query.categoryId)?.name || ''
+})
+
+const listTitle = computed(() => {
+  const parts: string[] = []
+  if (query.keyword.trim()) parts.push(`“${query.keyword.trim()}”`)
+  if (activeCategoryName.value) parts.push(activeCategoryName.value)
+  if (!parts.length) return '今日在售'
+  return parts.join(' · ') + ' 相关'
+})
+
 const load = async () => {
-  const data = await getBookPage(query)
+  const data = await getBookPage({
+    ...query,
+    keyword: query.keyword.trim() || undefined
+  })
   list.value = data.list
   total.value = data.total
+}
+
+const doSearch = async () => {
+  query.pageNo = 1
+  await load()
+}
+
+const pickCategory = async (id?: number) => {
+  query.categoryId = id
+  query.pageNo = 1
+  await load()
+}
+
+const onFilterChange = async () => {
+  query.pageNo = 1
+  await load()
 }
 
 onMounted(async () => {
@@ -94,57 +175,184 @@ onMounted(async () => {
 })
 </script>
 <style scoped>
-.home-intro {
+.home {
+  padding-bottom: 24px;
+}
+
+.search-hero {
+  background: var(--teal);
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(20, 35, 28, 0.08);
+}
+
+.search-hero-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+}
+
+.search-bar {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 8px;
-  padding: 8px 0 4px;
+  align-items: stretch;
+  width: 100%;
+  min-height: 44px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(10, 82, 68, 0.18);
 }
 
-.home-kicker {
-  margin: 0 0 8px;
-  color: var(--teal);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0 18px;
+  font-size: 15px;
+  color: var(--ink);
 }
 
-.home-cta {
-  flex-shrink: 0;
+.search-input::placeholder {
+  color: #a8a8a8;
+}
+
+.search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.search-btn {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
+  gap: 6px;
+  min-width: 96px;
   padding: 0 18px;
-  border-radius: 10px;
-  background: var(--teal);
-  color: #fff;
-  font-weight: 650;
-  transition: background 0.2s ease, transform 0.2s ease;
+  border: none;
+  border-left: 1.5px solid rgba(13, 107, 88, 0.2);
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.home-cta:hover {
-  background: var(--teal-deep);
-  transform: translateY(-1px);
+.search-btn:hover {
+  background: #c5e4da;
+  color: var(--teal-deep);
+}
+
+.search-btn:active {
+  background: #b5dbcf;
+}
+
+.search-ico {
+  width: 16px;
+  height: 16px;
+}
+
+.search-cats {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px 18px;
+  margin-top: 12px;
+  padding: 0 4px 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.search-cats::-webkit-scrollbar {
+  display: none;
+}
+
+.cat-link {
+  flex: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, font-weight 0.15s ease;
+}
+
+.cat-link:hover {
+  color: #fff;
+}
+
+.cat-link.active {
+  color: #fff;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.home-body {
+  padding-top: 18px;
 }
 
 .home-notice {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   border-radius: 10px;
 }
 
-.home-filters {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.72);
+.home-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
-.home-search {
-  width: min(320px, 100%);
+.home-toolbar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.home-section-title {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.home-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-publish {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  transition: background 0.2s ease;
+}
+
+.home-publish:hover {
+  background: var(--teal-deep);
 }
 
 .card-cover {
@@ -158,12 +366,20 @@ onMounted(async () => {
 }
 
 @media (max-width: 640px) {
-  .home-intro {
-    flex-direction: column;
+  .search-hero {
+    padding: 14px 14px 12px;
+  }
+
+  .search-btn {
+    min-width: 84px;
+    padding: 0 14px;
+  }
+
+  .home-toolbar {
     align-items: flex-start;
   }
 
-  .home-search {
+  .home-filters {
     width: 100%;
   }
 }

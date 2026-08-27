@@ -23,6 +23,10 @@
         <router-link to="/mine">我的</router-link>
         <template v-if="user.token && user.profile">
           <div class="nav-user">
+            <span class="nav-avatar" aria-hidden="true">
+              <img v-if="navAvatar" :src="navAvatar" alt="" />
+              <span v-else>{{ navLetter }}</span>
+            </span>
             <span class="nav-user-name">{{ user.profile.nickname || user.profile.username }}</span>
             <button type="button" class="nav-logout" @click="onLogout">退出</button>
           </div>
@@ -37,13 +41,20 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { fileUrl } from '@/api/http'
 import { useUserStore } from '@/stores/user'
 
 const user = useUserStore()
 const router = useRouter()
 let timer: ReturnType<typeof setInterval> | undefined
+
+const navAvatar = computed(() => fileUrl(user.profile?.avatar))
+const navLetter = computed(() => {
+  const name = user.profile?.nickname || user.profile?.username || '我'
+  return String(name).trim().charAt(0).toUpperCase() || '我'
+})
 
 onMounted(async () => {
   if (!user.token) return

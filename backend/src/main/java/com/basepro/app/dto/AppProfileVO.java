@@ -8,7 +8,11 @@ public record AppProfileVO(Long id,
                            String mobile,
                            String wechat,
                            String campus,
+                           String signature,
                            String avatar,
+                           String avatarPending,
+                           Integer avatarAuditStatus,
+                           String avatarRejectReason,
                            Integer sex,
                            LocalDateTime createTime) {
 }

@@ -31,4 +31,12 @@ public final class BookConstants {
     /** 平台通知账号，用于向用户端留言推送审核/举报结果 */
     public static final String PLATFORM_USERNAME = "platform";
 
+    /** 头像审核：无待审 / 待审 / 已驳回 */
+    public static final int AVATAR_AUDIT_NONE = 0;
+    public static final int AVATAR_AUDIT_PENDING = 1;
+    public static final int AVATAR_AUDIT_REJECTED = 2;
+
+    /** 留言撤回时限（分钟），参考微信 */
+    public static final int INQUIRY_RECALL_MINUTES = 2;
+
 }

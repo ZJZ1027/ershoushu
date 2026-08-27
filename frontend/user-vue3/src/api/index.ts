@@ -28,8 +28,12 @@ export const getInquiries = (params: any) => http.get('/inquiry/page', { params 
 export const getUnreadInquiryCount = () => http.get('/inquiry/unread-count')
 export const getMessages = (inquiryId: number) => http.get('/inquiry/messages', { params: { inquiryId } })
 export const sendInquiry = (data: any) => http.post('/inquiry/send', data)
+export const openInquiry = (bookId: number) =>
+  http.post('/inquiry/open', null, { params: { bookId } })
 export const replyInquiry = (inquiryId: number, content: string) =>
   http.post('/inquiry/reply', { content }, { params: { inquiryId } })
+export const recallInquiryMsg = (msgId: number) =>
+  http.put('/inquiry/recall', null, { params: { msgId } })
 
 export const createReport = (data: any) => http.post('/report/create', data)
 export const getNotices = () => http.get('/notice/list')

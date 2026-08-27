@@ -32,7 +32,7 @@
           <div v-if="canTrade" class="detail-actions">
             <a-button type="primary" @click="want">我想要</a-button>
             <a-button @click="fav">{{ book.favorited ? '已收藏' : '收藏' }}</a-button>
-            <a-button @click="showMsg = true">留言</a-button>
+            <a-button :loading="openingMsg" @click="goMessage">留言</a-button>
             <a-button status="danger" @click="openReport">举报</a-button>
           </div>
           <div v-else class="detail-actions">
@@ -48,9 +48,6 @@
         <a-form-item label="备注"><a-textarea v-model="wantForm.remark" /></a-form-item>
       </a-form>
     </a-modal>
-    <a-modal v-model:visible="showMsg" title="给卖家留言" @ok="submitMsg">
-      <a-textarea v-model="msg" placeholder="问问成色、能否议价等" />
-    </a-modal>
     <a-modal v-model:visible="showReport" title="举报说明" :on-before-ok="submitReport">
       <a-textarea v-model="reportContent" placeholder="请填写举报原因，例如封面不符、虚假信息等" :auto-size="{ minRows: 3, maxRows: 6 }" />
     </a-modal>
@@ -60,7 +57,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
-import { createReport, getBook, sendInquiry, toggleFavorite, wantBook } from '@/api'
+import { createReport, getBook, openInquiry, toggleFavorite, wantBook } from '@/api'
 import { fileUrl } from '@/api/http'
 import { useUserStore } from '@/stores/user'
 
@@ -70,9 +67,8 @@ const user = useUserStore()
 const loading = ref(true)
 const book = ref<any>()
 const showWant = ref(false)
-const showMsg = ref(false)
 const showReport = ref(false)
-const msg = ref('')
+const openingMsg = ref(false)
 const reportContent = ref('')
 const wantForm = reactive({ meetupPlace: '', remark: '' })
 const previewSrc = ref('')
@@ -136,12 +132,16 @@ const fav = async () => {
   await toggleFavorite(book.value.id)
   await load()
 }
-const submitMsg = async () => {
+const goMessage = async () => {
   if (!needLogin()) return
-  await sendInquiry({ bookId: book.value.id, content: msg.value })
-  Message.success('已发送')
-  showMsg.value = false
-  router.push('/messages')
+  if (!book.value?.id || openingMsg.value) return
+  openingMsg.value = true
+  try {
+    const inquiryId = await openInquiry(book.value.id)
+    await router.push({ path: '/messages', query: { id: String(inquiryId) } })
+  } finally {
+    openingMsg.value = false
+  }
 }
 const openReport = () => {
   if (!needLogin()) return

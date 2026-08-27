@@ -48,15 +48,16 @@
       :width="860"
       :footer="false"
       unmount-on-close
+      @close="closeDetail"
     >
       <a-spin :loading="detailLoading" style="width:100%">
         <div v-if="detail" class="book-detail">
           <div class="book-media">
-            <img class="book-cover" :src="previewUrl" alt="" />
+            <img class="book-cover" :key="'cover-' + detail.id + '-' + previewSrc" :src="previewUrl" alt="" />
             <div class="book-thumbs">
               <img
                 v-for="(u, i) in gallery"
-                :key="u + '-' + i"
+                :key="detail.id + '-' + u + '-' + i"
                 :src="fileUrl(u)"
                 :class="{ active: previewSrc === u }"
                 alt=""
@@ -192,6 +193,8 @@ const handleQuery = () => {
 const openDetail = async (id: number) => {
   detailVisible.value = true
   detailLoading.value = true
+  // 先清空，避免第二次打开仍短暂显示上一本书的图/文
+  detail.value = undefined
   previewSrc.value = ''
   try {
     detail.value = await getBook(id)
@@ -201,10 +204,17 @@ const openDetail = async (id: number) => {
   }
 }
 
+const closeDetail = () => {
+  detailVisible.value = false
+  detail.value = undefined
+  previewSrc.value = ''
+  detailLoading.value = false
+}
+
 const audit = async (id: number, pass: boolean, reason?: string) => {
   await auditBook({ id, pass, rejectReason: reason })
   message.success('已处理')
-  detailVisible.value = false
+  closeDetail()
   await getList()
   await badgeStore.refresh()
 }
@@ -241,7 +251,7 @@ const offShelf = async (id: number) => {
   await message.delConfirm('确认强制下架？')
   await offShelfBook(id)
   message.success('已下架')
-  detailVisible.value = false
+  closeDetail()
   await getList()
   await badgeStore.refresh()
 }

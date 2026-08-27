@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.Objects;
+
 @Service
 @RequiredArgsConstructor
 public class AppAuthService {
@@ -60,6 +62,7 @@ public class AppAuthService {
         user.setMobile(req.mobile());
         user.setCampus(req.campus());
         user.setStatus(0);
+        user.setAvatarAuditStatus(BookConstants.AVATAR_AUDIT_NONE);
         userMapper.insert(user);
         userRoleMapper.insert(SysUserRole.of(user.getId(), role.getId()));
         return authService.login(new LoginReq(req.username(), req.password(), null));
@@ -72,12 +75,17 @@ public class AppAuthService {
     public AppProfileVO profile() {
         SysUser user = current();
         return new AppProfileVO(user.getId(), user.getUsername(), user.getNickname(),
-                user.getMobile(), user.getWechat(), user.getCampus(), user.getAvatar(),
+                user.getMobile(), user.getWechat(), user.getCampus(), user.getSignature(),
+                user.getAvatar(),
+                user.getAvatarPending(),
+                user.getAvatarAuditStatus() == null ? BookConstants.AVATAR_AUDIT_NONE : user.getAvatarAuditStatus(),
+                user.getAvatarRejectReason(),
                 user.getSex(), user.getCreateTime());
     }
 
     public void updateProfile(AppProfileUpdateReq req) {
         Long userId = SecurityUtils.getUserId();
+        SysUser exist = current();
         SysUser update = new SysUser();
         update.setId(userId);
         if (StringUtils.hasText(req.nickname())) {
@@ -98,11 +106,26 @@ public class AppAuthService {
         if (req.campus() != null) {
             update.setCampus(req.campus());
         }
+        if (req.signature() != null) {
+            String signature = req.signature().trim();
+            if (signature.length() > 100) {
+                throw new BizException("个性签名不能超过 100 字");
+            }
+            update.setSignature(signature);
+        }
         if (req.sex() != null) {
             update.setSex(req.sex());
         }
-        if (StringUtils.hasText(req.avatar())) {
-            update.setAvatar(req.avatar());
+        // 头像不直接生效：提交到待审，管理端通过后才写入 avatar
+        if (StringUtils.hasText(req.avatar()) && !Objects.equals(req.avatar(), exist.getAvatar())) {
+            if (Objects.equals(exist.getAvatarAuditStatus(), BookConstants.AVATAR_AUDIT_PENDING)
+                    && Objects.equals(req.avatar(), exist.getAvatarPending())) {
+                // 重复提交同一待审图，忽略
+            } else {
+                update.setAvatarPending(req.avatar().trim());
+                update.setAvatarAuditStatus(BookConstants.AVATAR_AUDIT_PENDING);
+                update.setAvatarRejectReason("");
+            }
         }
         userMapper.updateById(update);
         loginUserService.evict(userId);

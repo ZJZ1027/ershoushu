@@ -3,29 +3,33 @@
     <div class="msg-shell">
       <aside class="msg-side">
         <div class="msg-side-head">最近消息</div>
-        <div v-if="!list.length" class="msg-empty-side">暂无会话</div>
-        <button
-          v-for="item in list"
-          :key="item.id"
-          type="button"
-          class="msg-item"
-          :class="{ active: currentId === item.id }"
-          @click="open(item.id)"
-        >
-          <div class="msg-avatar" :style="avatarStyle(item.peerNickname, item.peerAvatar, item.systemNotice)">
-            <img v-if="item.peerAvatar" :src="fileUrl(item.peerAvatar)" alt="" />
-            <span v-else>{{ avatarText(item.peerNickname, item.systemNotice) }}</span>
-          </div>
-          <div class="msg-item-body">
-            <div class="msg-item-top">
-              <span class="msg-item-name">{{ item.peerNickname || '用户' }}</span>
-              <span class="msg-item-time">{{ formatShortTime(item.lastTime) }}</span>
+        <div class="msg-side-list">
+          <div v-if="!list.length" class="msg-empty-side">暂无会话</div>
+          <button
+            v-for="item in list"
+            :key="item.id"
+            type="button"
+            class="msg-item"
+            :class="{ active: currentId === item.id }"
+            @click="open(item.id)"
+          >
+            <div class="msg-avatar" :style="avatarStyle(item.peerNickname, item.peerAvatar, item.systemNotice)">
+              <img v-if="item.peerAvatar" :src="fileUrl(item.peerAvatar)" alt="" />
+              <span v-else>{{ avatarText(item.peerNickname, item.systemNotice) }}</span>
             </div>
-            <div class="msg-item-book">{{ item.bookTitle || '会话' }}</div>
-            <div class="msg-item-preview">{{ item.lastMsg || '暂无消息' }}</div>
-          </div>
-          <span v-if="item.unread" class="msg-dot" />
-        </button>
+            <div class="msg-item-body">
+              <div class="msg-item-top">
+                <span class="msg-item-name">{{ item.peerNickname || '用户' }}</span>
+                <span class="msg-item-time">{{ formatShortTime(item.lastTime) }}</span>
+              </div>
+              <div class="msg-item-book">
+                {{ item.systemNotice ? '系统通知' : (item.bookTitle ? '最近关于《' + item.bookTitle + '》' : '会话') }}
+              </div>
+              <div class="msg-item-preview">{{ item.lastMsg || '暂无消息' }}</div>
+            </div>
+            <span v-if="item.unread" class="msg-dot" />
+          </button>
+        </div>
       </aside>
 
       <section class="msg-main">
@@ -59,11 +63,23 @@
                   />
                   <span v-else>{{ avatarText(isMine(m) ? myName : m.senderNickname, current.systemNotice && !isMine(m)) }}</span>
                 </div>
-                <div class="msg-bubble-wrap">
+                <div v-if="isRecalled(m)" class="msg-recalled">
+                  {{ isMine(m) ? '你撤回了一条消息' : '对方撤回了一条消息' }}
+                </div>
+                <div v-else class="msg-bubble-wrap">
                   <div class="msg-bubble">
                     <div class="msg-bubble-text">{{ m.content }}</div>
                     <div v-if="current.systemNotice && !isMine(m)" class="msg-bubble-tip">此条消息为系统通知</div>
                   </div>
+                  <button
+                    v-if="canRecall(m)"
+                    type="button"
+                    class="msg-recall-btn"
+                    :disabled="recallingId === m.id"
+                    @click="recall(m)"
+                  >
+                    撤回
+                  </button>
                 </div>
               </div>
             </template>
@@ -91,7 +107,6 @@
         </template>
 
         <div v-else class="msg-placeholder">
-          <div class="msg-placeholder-icon">💬</div>
           <div>选择左侧会话开始聊天</div>
         </div>
       </section>
@@ -100,18 +115,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { getInquiries, getMessages, replyInquiry } from '@/api'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { Message } from '@arco-design/web-vue'
+import { getInquiries, getMessages, recallInquiryMsg, replyInquiry } from '@/api'
 import { fileUrl } from '@/api/http'
 import { useUserStore } from '@/stores/user'
 
+/** 与后端一致：发送后 2 分钟内可撤回 */
+const RECALL_MS = 2 * 60 * 1000
+
+const route = useRoute()
 const user = useUserStore()
 const list = ref<any[]>([])
 const messages = ref<any[]>([])
 const currentId = ref<number>()
 const content = ref('')
 const sending = ref(false)
+const recallingId = ref<number | null>(null)
+const nowTick = ref(Date.now())
 const scrollRef = ref<HTMLElement>()
+let tickTimer: ReturnType<typeof setInterval> | undefined
 
 const current = computed(() => list.value.find((i) => i.id === currentId.value))
 const myId = computed(() => Number(user.profile?.id || 0))
@@ -119,7 +143,13 @@ const myName = computed(() => user.profile?.nickname || user.profile?.username |
 const myAvatar = computed(() => user.profile?.avatar || '')
 
 const isMine = (m: any) => Number(m.senderId) === myId.value
-
+const isRecalled = (m: any) => Number(m.recalled) === 1
+const canRecall = (m: any) => {
+  void nowTick.value
+  if (!isMine(m) || isRecalled(m) || !m.createTime) return false
+  if (m.canRecall === false) return false
+  return Date.now() - new Date(m.createTime).getTime() < RECALL_MS
+}
 const avatarText = (name?: string, system?: boolean) => {
   if (system) return '通'
   const n = (name || '用').trim()
@@ -163,10 +193,15 @@ const showTime = (idx: number) => {
   return Math.abs(new Date(cur).getTime() - new Date(prev).getTime()) > 5 * 60 * 1000
 }
 
-const scrollBottom = async () => {
+const scrollBottom = async (smooth = false) => {
   await nextTick()
   const el = scrollRef.value
-  if (el) el.scrollTop = el.scrollHeight
+  if (!el) return
+  if (smooth && typeof el.scrollTo === 'function') {
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  } else {
+    el.scrollTop = el.scrollHeight
+  }
 }
 
 const load = async () => {
@@ -179,7 +214,17 @@ const open = async (id: number) => {
   const hit = list.value.find((i) => i.id === id)
   if (hit) hit.unread = 0
   await user.refreshBadges()
-  await scrollBottom()
+  await scrollBottom(false)
+}
+
+const openFromQuery = async () => {
+  const raw = route.query.id
+  const id = Number(Array.isArray(raw) ? raw[0] : raw)
+  if (!id || Number.isNaN(id)) return
+  if (!list.value.some((i) => i.id === id)) {
+    await load()
+  }
+  await open(id)
 }
 
 const send = async () => {
@@ -189,14 +234,35 @@ const send = async () => {
   try {
     await replyInquiry(currentId.value, text)
     content.value = ''
-    await open(currentId.value)
+    messages.value = (await getMessages(currentId.value)) || []
     await load()
+    await scrollBottom(true)
   } finally {
     sending.value = false
   }
 }
 
+const recall = async (m: any) => {
+  if (!canRecall(m) || recallingId.value) return
+  recallingId.value = m.id
+  try {
+    await recallInquiryMsg(m.id)
+    messages.value = (await getMessages(currentId.value!)) || []
+    await load()
+    Message.success('已撤回')
+  } catch {
+    if (currentId.value) {
+      messages.value = (await getMessages(currentId.value)) || []
+    }
+  } finally {
+    recallingId.value = null
+  }
+}
+
 onMounted(async () => {
+  tickTimer = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 15_000)
   if (!user.profile) {
     try {
       await user.loadProfile()
@@ -205,6 +271,18 @@ onMounted(async () => {
     }
   }
   await load()
+  await openFromQuery()
+})
+
+watch(
+  () => route.query.id,
+  async () => {
+    await openFromQuery()
+  }
+)
+
+onUnmounted(() => {
+  if (tickTimer) clearInterval(tickTimer)
 })
 </script>
 
@@ -219,6 +297,7 @@ onMounted(async () => {
   grid-template-columns: 320px 1fr;
   height: calc(100vh - 110px);
   min-height: 520px;
+  max-height: calc(100vh - 110px);
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -228,6 +307,7 @@ onMounted(async () => {
 .msg-side {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border-right: 1px solid var(--line);
   background: #f5f9f7;
   overflow: hidden;
@@ -241,6 +321,28 @@ onMounted(async () => {
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, #e8f2ee 0%, #f5f9f7 100%);
 }
+.msg-side-list {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.msg-side-list::-webkit-scrollbar,
+.msg-chat::-webkit-scrollbar {
+  width: 6px;
+}
+.msg-side-list::-webkit-scrollbar-thumb,
+.msg-chat::-webkit-scrollbar-thumb {
+  background: rgba(20, 35, 28, 0.22);
+  border-radius: 6px;
+}
+.msg-side-list::-webkit-scrollbar-track,
+.msg-chat::-webkit-scrollbar-track {
+  background: transparent;
+}
 .msg-empty-side,
 .msg-empty-chat,
 .msg-placeholder {
@@ -253,7 +355,7 @@ onMounted(async () => {
   font-size: 14px;
 }
 .msg-empty-side {
-  flex: 1;
+  min-height: 160px;
 }
 .msg-item {
   position: relative;
@@ -349,6 +451,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   background: #eef4f1;
 }
 .msg-main-head {
@@ -371,9 +476,14 @@ onMounted(async () => {
   color: #86909c;
 }
 .msg-chat {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 18px 20px 8px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .msg-time {
   margin: 8px 0 14px;
@@ -392,6 +502,37 @@ onMounted(async () => {
 }
 .msg-bubble-wrap {
   max-width: min(72%, 460px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.msg-row.mine .msg-bubble-wrap {
+  align-items: flex-end;
+}
+.msg-recall-btn {
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 12px;
+  color: #86909c;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.msg-recall-btn:hover:not(:disabled) {
+  color: #0d6b58;
+}
+.msg-recall-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.msg-recalled {
+  max-width: min(72%, 460px);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #86909c;
+  background: rgba(134, 144, 156, 0.08);
+  border-radius: 8px;
 }
 .msg-bubble {
   padding: 10px 12px;
@@ -455,23 +596,25 @@ onMounted(async () => {
 .msg-placeholder {
   flex: 1;
 }
-.msg-placeholder-icon {
-  font-size: 42px;
-  line-height: 1;
-  opacity: 0.7;
-}
 @media (max-width: 800px) {
+  .msg-page {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
   .msg-shell {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: 0;
+    grid-template-rows: minmax(180px, 34%) 1fr;
+    height: calc(100vh - 96px);
+    min-height: 560px;
+    max-height: calc(100vh - 96px);
   }
   .msg-side {
-    max-height: 280px;
-    overflow: auto;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
   .msg-main {
-    min-height: 420px;
+    min-height: 0;
   }
 }
 </style>

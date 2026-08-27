@@ -1,10 +1,16 @@
 <template>
   <div class="page mine">
     <section class="mine-hero">
-      <div>
-        <p class="mine-kicker">个人中心</p>
-        <h1 class="page-title">{{ displayName }}</h1>
-        <p class="page-sub">管理你发布的教材与收藏，完善联系方式方便面交。</p>
+      <div class="mine-hero-main">
+        <div class="mine-avatar" aria-hidden="true">
+          <img v-if="avatarSrc" :src="avatarSrc" alt="" />
+          <span v-else>{{ avatarLetter }}</span>
+        </div>
+        <div>
+          <p class="mine-kicker">个人中心</p>
+          <h1 class="page-title">{{ displayName }}</h1>
+          <p class="page-sub">{{ signatureText }}</p>
+        </div>
       </div>
       <a-button type="primary" @click="$router.push('/profile')">个人资料</a-button>
     </section>
@@ -56,12 +62,18 @@
 import { computed, onMounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { getFavorites, getMyBooks, offShelf } from '@/api'
+import { fileUrl } from '@/api/http'
 import { useUserStore } from '@/stores/user'
 
 const user = useUserStore()
 const books = ref<any[]>([])
 const favs = ref<any[]>([])
 const displayName = computed(() => user.profile?.nickname || user.profile?.username || '我的书栈')
+const signatureText = computed(
+  () => user.profile?.signature || '管理你发布的教材与收藏，完善联系方式方便面交。'
+)
+const avatarSrc = computed(() => fileUrl(user.profile?.avatar))
+const avatarLetter = computed(() => String(displayName.value).trim().charAt(0).toUpperCase() || '我')
 const statusText = (s: number) => ['待审', '在售', '预约中', '已成交', '已下架', '已驳回', '草稿'][s] || ''
 const bookDesc = (item: any) => {
   const price = item.price == null ? '未定价' : '¥' + item.price
@@ -72,6 +84,7 @@ const load = async () => {
   books.value = (await getMyBooks({ pageNo: 1, pageSize: 50 })).list
   favs.value = (await getFavorites({ pageNo: 1, pageSize: 50 })).list
 }
+
 const off = async (id: number) => {
   await offShelf(id)
   Message.success('已下架')
@@ -86,6 +99,37 @@ onMounted(load)
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 8px;
+}
+
+.mine-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.mine-avatar {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--line);
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-brand);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.mine-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .mine-kicker {

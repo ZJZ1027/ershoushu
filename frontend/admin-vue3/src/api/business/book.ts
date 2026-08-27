@@ -60,12 +60,24 @@ export const getInquiryMessages = async (inquiryId: number) => {
   return await request.get({ url: '/business/inquiry/messages', params: { inquiryId } })
 }
 
+export const markAllInquiryRead = async () => {
+  return await request.put({ url: '/business/inquiry/mark-all-read' })
+}
+
 export const getMemberPage = async (params: PageParam) => {
   return await request.get({ url: '/business/member/page', params })
 }
 
+export const getMember = async (id: number) => {
+  return await request.get({ url: '/business/member/get?id=' + id })
+}
+
 export const updateMemberStatus = async (data: { id: number; status: number }) => {
   return await request.put({ url: '/business/member/update-status', data })
+}
+
+export const auditMemberAvatar = async (data: { id: number; pass: boolean; rejectReason?: string }) => {
+  return await request.put({ url: '/business/member/audit-avatar', data })
 }
 
 export const getReportPage = async (params: PageParam) => {

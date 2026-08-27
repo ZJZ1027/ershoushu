@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.basepro.business.BookConstants;
 import com.basepro.business.dto.AdminBadgeVO;
+import com.basepro.business.dto.AvatarAuditReq;
 import com.basepro.business.dto.DashboardVO;
 import com.basepro.business.dto.MemberQuery;
 import com.basepro.business.entity.BuBook;
@@ -25,12 +26,14 @@ import com.basepro.system.mapper.SysUserMapper;
 import com.basepro.system.mapper.SysUserRoleMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +47,7 @@ public class BuMemberService {
     private final BuBookOrderMapper orderMapper;
     private final BuReportMapper reportMapper;
     private final BuInquiryMapper inquiryMapper;
+    private final BuInquiryService inquiryService;
 
     public PageResult<SysUser> page(MemberQuery query) {
         Long roleId = appRoleId();
@@ -62,8 +66,68 @@ public class BuMemberService {
                 .like(StringUtils.hasText(query.getNickname()), SysUser::getNickname, query.getNickname())
                 .like(StringUtils.hasText(query.getMobile()), SysUser::getMobile, query.getMobile())
                 .eq(query.getStatus() != null, SysUser::getStatus, query.getStatus())
+                .eq(query.getAvatarAuditStatus() != null, SysUser::getAvatarAuditStatus, query.getAvatarAuditStatus())
                 .orderByDesc(SysUser::getId));
         return PageResult.of(page);
+    }
+
+    public SysUser get(Long id) {
+        SysUser user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BizException("用户不存在");
+        }
+        Long roleId = appRoleId();
+        Long count = userRoleMapper.selectCount(Wrappers.<SysUserRole>lambdaQuery()
+                .eq(SysUserRole::getUserId, id)
+                .eq(SysUserRole::getRoleId, roleId));
+        if (count == null || count == 0) {
+            throw new BizException("不是校园用户");
+        }
+        return user;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void auditAvatar(AvatarAuditReq req) {
+        SysUser user = userMapper.selectById(req.id());
+        if (user == null) {
+            throw new BizException("用户不存在");
+        }
+        if (!Objects.equals(user.getAvatarAuditStatus(), BookConstants.AVATAR_AUDIT_PENDING)
+                || !StringUtils.hasText(user.getAvatarPending())) {
+            throw new BizException("当前没有待审核头像");
+        }
+        if (req.pass()) {
+            userMapper.update(null, Wrappers.<SysUser>lambdaUpdate()
+                    .set(SysUser::getAvatar, user.getAvatarPending())
+                    .set(SysUser::getAvatarPending, null)
+                    .set(SysUser::getAvatarAuditStatus, BookConstants.AVATAR_AUDIT_NONE)
+                    .set(SysUser::getAvatarRejectReason, null)
+                    .eq(SysUser::getId, user.getId()));
+        } else {
+            if (!StringUtils.hasText(req.rejectReason())) {
+                throw new BizException("请填写驳回原因");
+            }
+            userMapper.update(null, Wrappers.<SysUser>lambdaUpdate()
+                    .set(SysUser::getAvatarPending, null)
+                    .set(SysUser::getAvatarAuditStatus, BookConstants.AVATAR_AUDIT_REJECTED)
+                    .set(SysUser::getAvatarRejectReason, req.rejectReason().trim())
+                    .eq(SysUser::getId, user.getId()));
+        }
+        loginUserService.evict(user.getId());
+        notifyAvatarResult(user, req.pass(), req.rejectReason());
+    }
+
+    private void notifyAvatarResult(SysUser user, boolean pass, String reason) {
+        StringBuilder text = new StringBuilder();
+        if (pass) {
+            text.append("您提交的头像已通过审核，现已生效。");
+        } else {
+            text.append("您提交的头像未通过审核。");
+            if (StringUtils.hasText(reason)) {
+                text.append("原因：").append(reason.trim());
+            }
+        }
+        inquiryService.notifyUser(user.getId(), null, text.toString());
     }
 
     public void updateStatus(Long id, Integer status) {
@@ -104,6 +168,8 @@ public class BuMemberService {
                 .eq(BuInquiry::getAdminUnread, 1));
         long report = reportMapper.selectCount(Wrappers.<BuReport>lambdaQuery()
                 .eq(BuReport::getStatus, BookConstants.REPORT_PENDING));
+        long avatar = userMapper.selectCount(Wrappers.<SysUser>lambdaQuery()
+                .eq(SysUser::getAvatarAuditStatus, BookConstants.AVATAR_AUDIT_PENDING));
         long member = 0;
         if (memberSinceMillis != null && memberSinceMillis > 0) {
             LocalDateTime since = LocalDateTime.ofInstant(Instant.ofEpochMilli(memberSinceMillis), ZoneId.systemDefault());
@@ -120,7 +186,7 @@ public class BuMemberService {
                         .gt(SysUser::getCreateTime, since));
             }
         }
-        return new AdminBadgeVO(book, order, inquiry, member, report);
+        return new AdminBadgeVO(book, order, inquiry, member, report, avatar);
     }
 
     private Long appRoleId() {

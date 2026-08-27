@@ -4,7 +4,12 @@
     <div class="list-card">
       <a-table :data="list" :loading="loading" row-key="id" :pagination="false">
         <template #columns>
-          <a-table-column title="书籍" data-index="bookTitle" />
+          <a-table-column title="书籍" :width="200">
+            <template #cell="{ record }">
+              <span v-if="record.systemNotice">系统通知</span>
+              <span v-else>{{ record.bookTitle || '—' }}</span>
+            </template>
+          </a-table-column>
           <a-table-column title="对方" data-index="peerNickname" :width="120" />
           <a-table-column title="最近留言" data-index="lastMsg" />
           <a-table-column title="时间" data-index="lastTime" :width="180" />
@@ -23,15 +28,20 @@
     <a-modal v-model:visible="visible" title="留言内容" :footer="false" :width="520">
       <a-list :data="messages" size="small">
         <template #item="{ item }">
-          <a-list-item>{{ item.senderNickname }}：{{ item.content }}</a-list-item>
+          <a-list-item>
+            {{ item.senderNickname }}：
+            <span v-if="Number(item.recalled) === 1" style="color: var(--color-text-3)">已撤回一条消息</span>
+            <span v-else>{{ item.content }}</span>
+          </a-list-item>
         </template>
       </a-list>
     </a-modal>
   </div>
 </template>
 <script lang="ts" setup>
-import { getInquiryMessages, getInquiryPage } from '@/api/business/book'
+import { getInquiryMessages, getInquiryPage, markAllInquiryRead } from '@/api/business/book'
 import { useBusinessBadgeStore } from '@/store/modules/businessBadge'
+import { onActivated, onMounted } from 'vue'
 defineOptions({ name: 'BusinessInquiry' })
 const badgeStore = useBusinessBadgeStore()
 const loading = ref(false)
@@ -53,7 +63,22 @@ const open = async (id: number) => {
   visible.value = true
   await badgeStore.refresh()
 }
-onMounted(getList)
+/** 点进留言抽查菜单：全部视为已读，角标清零 */
+const markAllRead = async () => {
+  try {
+    await markAllInquiryRead()
+    badgeStore.inquiry = 0
+  } catch {
+    /* 忽略，不影响列表 */
+  }
+  await badgeStore.refresh()
+}
+const enterPage = async () => {
+  await markAllRead()
+  await getList()
+}
+onMounted(enterPage)
+onActivated(enterPage)
 </script>
 <style lang="scss" scoped>
 .infra-page { display: flex; flex-direction: column; gap: 16px; }

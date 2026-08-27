@@ -92,9 +92,21 @@ public class AppTradeController {
         return R.ok(inquiryService.send(req));
     }
 
+    /** 打开与卖家的会话（无消息也可进入聊天页） */
+    @PostMapping("/inquiry/open")
+    public R<Long> open(@RequestParam Long bookId) {
+        return R.ok(inquiryService.openByBook(bookId));
+    }
+
     @PostMapping("/inquiry/reply")
     public R<Void> reply(@RequestParam Long inquiryId, @RequestBody Map<String, String> body) {
         inquiryService.reply(inquiryId, body == null ? null : body.get("content"));
+        return R.ok();
+    }
+
+    @PutMapping("/inquiry/recall")
+    public R<Void> recall(@RequestParam Long msgId) {
+        inquiryService.recall(msgId);
         return R.ok();
     }
 

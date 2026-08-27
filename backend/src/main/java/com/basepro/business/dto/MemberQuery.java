@@ -16,4 +16,7 @@ public class MemberQuery extends PageQuery {
 
     private Integer status;
 
+    /** 头像审核状态：1 待审 */
+    private Integer avatarAuditStatus;
+
 }

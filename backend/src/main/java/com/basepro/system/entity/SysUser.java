@@ -60,11 +60,23 @@ public class SysUser extends BaseEntity {
 
     private String avatar;
 
+    /** 待审核头像地址 */
+    private String avatarPending;
+
+    /** 头像审核状态：0无待审 1待审 2已驳回 */
+    private Integer avatarAuditStatus;
+
+    /** 头像驳回原因 */
+    private String avatarRejectReason;
+
     @Size(max = 64, message = "微信号长度不能超过 64 个字符")
     private String wechat;
 
     @Size(max = 64, message = "校区长度不能超过 64 个字符")
     private String campus;
+
+    @Size(max = 100, message = "个性签名长度不能超过 100 个字符")
+    private String signature;
 
     private Integer status;
 

@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +36,13 @@ public class BuInquiryAdminController {
     @PreAuthorize("hasAuthority('business:inquiry:query')")
     public R<List<BuInquiryMsg>> messages(@RequestParam Long inquiryId) {
         return R.ok(inquiryService.messages(inquiryId, true));
+    }
+
+    @PutMapping("/mark-all-read")
+    @PreAuthorize("hasAuthority('business:inquiry:query')")
+    public R<Void> markAllRead() {
+        inquiryService.markAllAdminRead();
+        return R.ok();
     }
 
 }

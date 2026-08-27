@@ -27,7 +27,14 @@ public class BuInquiryMsg extends BaseEntity {
 
     private String content;
 
+    /** 是否已撤回：0否 1是 */
+    private Integer recalled;
+
     @TableField(exist = false)
     private String senderNickname;
+
+    /** 当前用户是否可撤回（服务端计算） */
+    @TableField(exist = false)
+    private Boolean canRecall;
 
 }

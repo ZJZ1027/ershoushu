@@ -82,11 +82,112 @@ public class BuInquiryService {
         Map<Long, SysUser> users = senderIds.isEmpty() ? Map.of()
                 : userMapper.selectByIds(senderIds).stream()
                 .collect(Collectors.toMap(SysUser::getId, Function.identity()));
+        LocalDateTime now = LocalDateTime.now();
         for (BuInquiryMsg msg : list) {
             SysUser sender = users.get(msg.getSenderId());
             msg.setSenderNickname(sender == null ? null : sender.getNickname());
+            boolean recalled = Integer.valueOf(1).equals(msg.getRecalled());
+            boolean canRecall = !adminView
+                    && !recalled
+                    && Objects.equals(msg.getSenderId(), userId)
+                    && msg.getCreateTime() != null
+                    && !msg.getCreateTime().isBefore(now.minusMinutes(BookConstants.INQUIRY_RECALL_MINUTES));
+            msg.setCanRecall(canRecall);
+            if (recalled) {
+                msg.setContent("");
+            }
         }
         return list;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void recall(Long msgId) {
+        if (msgId == null) {
+            throw new BizException("消息不存在");
+        }
+        BuInquiryMsg msg = msgMapper.selectById(msgId);
+        if (msg == null) {
+            throw new BizException("消息不存在");
+        }
+        Long userId = SecurityUtils.getUserId();
+        if (!Objects.equals(msg.getSenderId(), userId)) {
+            throw new BizException("只能撤回自己发送的消息");
+        }
+        if (Integer.valueOf(1).equals(msg.getRecalled())) {
+            throw new BizException("消息已撤回");
+        }
+        if (msg.getCreateTime() == null
+                || msg.getCreateTime().isBefore(LocalDateTime.now().minusMinutes(BookConstants.INQUIRY_RECALL_MINUTES))) {
+            throw new BizException("超过 " + BookConstants.INQUIRY_RECALL_MINUTES + " 分钟，无法撤回");
+        }
+        BuInquiry inquiry = inquiryMapper.selectById(msg.getInquiryId());
+        if (inquiry == null) {
+            throw new BizException("会话不存在");
+        }
+        if (!Objects.equals(inquiry.getBuyerId(), userId) && !Objects.equals(inquiry.getSellerId(), userId)) {
+            throw new BizException("无权操作该会话");
+        }
+        BuInquiryMsg update = new BuInquiryMsg();
+        update.setId(msgId);
+        update.setRecalled(1);
+        msgMapper.updateById(update);
+        refreshInquiryLastMsg(inquiry.getId());
+    }
+
+    private void refreshInquiryLastMsg(Long inquiryId) {
+        BuInquiryMsg last = msgMapper.selectOne(Wrappers.<BuInquiryMsg>lambdaQuery()
+                .eq(BuInquiryMsg::getInquiryId, inquiryId)
+                .orderByDesc(BuInquiryMsg::getId)
+                .last("LIMIT 1"), false);
+        BuInquiry update = new BuInquiry();
+        update.setId(inquiryId);
+        if (last == null) {
+            update.setLastMsg("");
+        } else if (Integer.valueOf(1).equals(last.getRecalled())) {
+            update.setLastMsg("撤回了一条消息");
+            update.setLastTime(last.getCreateTime());
+        } else {
+            update.setLastMsg(clip(last.getContent(), 500));
+            update.setLastTime(last.getCreateTime());
+        }
+        inquiryMapper.updateById(update);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Long openByBook(Long bookId) {
+        if (bookId == null) {
+            throw new BizException("书籍不存在");
+        }
+        Long userId = SecurityUtils.getUserId();
+        BuBook book = bookMapper.selectById(bookId);
+        if (book == null) {
+            throw new BizException("书籍不存在");
+        }
+        if (Objects.equals(book.getSellerId(), userId)) {
+            throw new BizException("不能给自己留言");
+        }
+        Long peerId = book.getSellerId();
+        BuInquiry inquiry = findPeerInquiry(userId, peerId);
+        if (inquiry == null) {
+            inquiry = new BuInquiry();
+            inquiry.setBookId(book.getId());
+            inquiry.setBuyerId(userId);
+            inquiry.setSellerId(peerId);
+            inquiry.setLastMsg("");
+            inquiry.setLastTime(LocalDateTime.now());
+            inquiry.setBuyerUnread(0);
+            inquiry.setSellerUnread(0);
+            inquiry.setAdminUnread(0);
+            inquiryMapper.insert(inquiry);
+            return inquiry.getId();
+        }
+        if (!Objects.equals(inquiry.getBookId(), book.getId())) {
+            BuInquiry update = new BuInquiry();
+            update.setId(inquiry.getId());
+            update.setBookId(book.getId());
+            inquiryMapper.updateById(update);
+        }
+        return inquiry.getId();
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -189,7 +290,7 @@ public class BuInquiryService {
 
     @Transactional(rollbackFor = Exception.class)
     public void notifyUser(Long userId, Long bookId, String content) {
-        if (userId == null || bookId == null || content == null || content.isBlank()) {
+        if (userId == null || content == null || content.isBlank()) {
             return;
         }
         SysUser platform = platformUser();
@@ -216,14 +317,13 @@ public class BuInquiryService {
             inquiry.setAdminUnread(1);
             inquiryMapper.insert(inquiry);
         } else {
-            BuInquiry update = new BuInquiry();
-            update.setId(inquiry.getId());
-            update.setBookId(bookId);
-            update.setLastMsg(clip(body, 500));
-            update.setLastTime(LocalDateTime.now());
-            update.setBuyerUnread(1);
-            update.setAdminUnread(1);
-            inquiryMapper.updateById(update);
+            inquiryMapper.update(null, Wrappers.<BuInquiry>lambdaUpdate()
+                    .set(BuInquiry::getBookId, bookId)
+                    .set(BuInquiry::getLastMsg, clip(body, 500))
+                    .set(BuInquiry::getLastTime, LocalDateTime.now())
+                    .set(BuInquiry::getBuyerUnread, 1)
+                    .set(BuInquiry::getAdminUnread, 1)
+                    .eq(BuInquiry::getId, inquiry.getId()));
         }
         BuInquiryMsg msg = new BuInquiryMsg();
         msg.setInquiryId(inquiry.getId());
@@ -234,6 +334,13 @@ public class BuInquiryService {
 
     public long adminUnreadCount() {
         return inquiryMapper.selectCount(Wrappers.<BuInquiry>lambdaQuery()
+                .eq(BuInquiry::getAdminUnread, 1));
+    }
+
+    /** 管理端打开留言抽查：全部标记为已读 */
+    public void markAllAdminRead() {
+        inquiryMapper.update(null, Wrappers.<BuInquiry>lambdaUpdate()
+                .set(BuInquiry::getAdminUnread, 0)
                 .eq(BuInquiry::getAdminUnread, 1));
     }
 
@@ -279,7 +386,12 @@ public class BuInquiryService {
             BuBook book = books.get(inquiry.getBookId());
             boolean system = Objects.equals(inquiry.getBuyerId(), platformId)
                     || Objects.equals(inquiry.getSellerId(), platformId);
-            inquiry.setBookTitle(book == null ? (system ? "系统通知" : "会话") : book.getTitle());
+            if (system) {
+                // 头像审核等系统通知可不关联书籍；书籍驳回/举报处理仍可带书名
+                inquiry.setBookTitle(book == null ? "系统通知" : book.getTitle());
+            } else {
+                inquiry.setBookTitle(book == null ? "会话" : book.getTitle());
+            }
             Long peerId = currentUserId == null ? inquiry.getBuyerId()
                     : (Objects.equals(currentUserId, inquiry.getBuyerId())
                     ? inquiry.getSellerId() : inquiry.getBuyerId());
