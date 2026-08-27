@@ -80,14 +80,16 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getBook, getCategories, getDict, publishBook, updateBook, uploadFile } from '@/api'
 import { fileUrl } from '@/api/http'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const user = useUserStore()
 const isEdit = !!route.query.id
 const bookId = ref<number | undefined>(isEdit ? Number(route.query.id) : undefined)
 const saving = ref(false)
@@ -118,6 +120,85 @@ const form = reactive<any>({
 })
 const rules = {
   title: [{ required: true, message: '请输入书名' }]
+}
+
+/** 新建发布的本地草稿（按用户区分）；已提交/保存成功后清除 */
+const draftKey = () => {
+  const uid = user.profile?.id || 'anon'
+  return bookId.value ? `publishDraft:edit:${uid}:${bookId.value}` : `publishDraft:new:${uid}`
+}
+
+const DRAFT_FIELDS = [
+  'title',
+  'categoryId',
+  'author',
+  'publisher',
+  'isbn',
+  'price',
+  'originPrice',
+  'conditionCode',
+  'campus',
+  'meetupPlace',
+  'courseName',
+  'majorName',
+  'description',
+  'coverUrl',
+  'imageUrls',
+  'status'
+] as const
+
+let draftReady = false
+let draftTimer: ReturnType<typeof setTimeout> | undefined
+
+const snapshotForm = () => {
+  const data: Record<string, unknown> = {}
+  for (const key of DRAFT_FIELDS) {
+    data[key] = form[key]
+  }
+  return data
+}
+
+const saveDraft = () => {
+  if (!draftReady) return
+  try {
+    sessionStorage.setItem(draftKey(), JSON.stringify(snapshotForm()))
+  } catch {
+    /* 配额满等忽略 */
+  }
+}
+
+const scheduleSaveDraft = () => {
+  if (!draftReady) return
+  if (draftTimer) clearTimeout(draftTimer)
+  draftTimer = setTimeout(saveDraft, 200)
+}
+
+const clearDraft = () => {
+  try {
+    sessionStorage.removeItem(draftKey())
+    // 新建发布成功后也清掉「new」键，防止保存草稿生成 id 前后键不一致残留
+    const uid = user.profile?.id || 'anon'
+    sessionStorage.removeItem(`publishDraft:new:${uid}`)
+  } catch {
+    /* ignore */
+  }
+}
+
+const restoreDraft = () => {
+  try {
+    const raw = sessionStorage.getItem(draftKey())
+    if (!raw) return false
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== 'object') return false
+    for (const key of DRAFT_FIELDS) {
+      if (key in data) form[key] = data[key]
+    }
+    if (!Array.isArray(form.imageUrls)) form.imageUrls = []
+    syncCover()
+    return true
+  } catch {
+    return false
+  }
 }
 
 const syncCover = () => {
@@ -203,6 +284,7 @@ const persist = async (submit: boolean) => {
       const id = await publishBook(payload)
       bookId.value = Number(id)
     }
+    clearDraft()
     Message.success(submit ? '已提交审核' : '已保存草稿')
     router.push('/mine')
   } catch {
@@ -212,7 +294,16 @@ const persist = async (submit: boolean) => {
   }
 }
 
+watch(form, scheduleSaveDraft, { deep: true })
+
 onMounted(async () => {
+  if (!user.profile) {
+    try {
+      await user.loadProfile()
+    } catch {
+      /* ignore */
+    }
+  }
   categories.value = await getCategories()
   campuses.value = await getDict('campus')
   conditions.value = await getDict('book_condition')
@@ -220,7 +311,17 @@ onMounted(async () => {
     const data = await getBook(bookId.value)
     Object.assign(form, data)
     if (!Array.isArray(form.imageUrls)) form.imageUrls = []
+    // 编辑页：若有未提交的本地改动，覆盖服务端快照
+    restoreDraft()
+  } else {
+    restoreDraft()
   }
+  draftReady = true
+})
+
+onUnmounted(() => {
+  if (draftTimer) clearTimeout(draftTimer)
+  saveDraft()
 })
 </script>
 <style scoped>

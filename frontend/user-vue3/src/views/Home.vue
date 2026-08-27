@@ -4,7 +4,7 @@
       <div class="search-hero-inner">
         <form class="search-bar" @submit.prevent="doSearch">
           <input
-            v-model="query.keyword"
+            v-model="keywordInput"
             class="search-input"
             type="search"
             enterkeyhint="search"
@@ -111,10 +111,14 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { getBookPage, getCategories, getDict, getNotices } from '@/api'
 import { fileUrl } from '@/api/http'
 
+/** 输入框草稿：仅点搜索后才写入 appliedKeyword 并刷新列表 */
+const keywordInput = ref('')
+/** 已生效关键词：标题与列表都按它展示，避免边输入边改标题 */
+const appliedKeyword = ref('')
+
 const query = reactive({
   pageNo: 1,
   pageSize: 12,
-  keyword: '',
   categoryId: undefined as number | undefined,
   campus: undefined as string | undefined,
   conditionCode: undefined as string | undefined
@@ -125,6 +129,9 @@ const categories = ref<any[]>([])
 const campuses = ref<any[]>([])
 const conditions = ref<any[]>([])
 const notices = ref<any[]>([])
+/** 忽略过期请求，避免首屏/筛选项初始化的旧结果覆盖搜索结果 */
+let loadSeq = 0
+const filtersReady = ref(false)
 
 const cover = (b: any) => fileUrl(b.coverUrl) || 'https://placehold.co/400x300?text=Book'
 
@@ -135,22 +142,34 @@ const activeCategoryName = computed(() => {
 
 const listTitle = computed(() => {
   const parts: string[] = []
-  if (query.keyword.trim()) parts.push(`“${query.keyword.trim()}”`)
+  if (appliedKeyword.value) parts.push(`“${appliedKeyword.value}”`)
   if (activeCategoryName.value) parts.push(activeCategoryName.value)
   if (!parts.length) return '今日在售'
   return parts.join(' · ') + ' 相关'
 })
 
+const buildParams = () => {
+  const params: Record<string, string | number> = {
+    pageNo: query.pageNo,
+    pageSize: query.pageSize
+  }
+  if (appliedKeyword.value) params.keyword = appliedKeyword.value
+  if (query.categoryId != null) params.categoryId = query.categoryId
+  if (query.campus) params.campus = query.campus
+  if (query.conditionCode) params.conditionCode = query.conditionCode
+  return params
+}
+
 const load = async () => {
-  const data = await getBookPage({
-    ...query,
-    keyword: query.keyword.trim() || undefined
-  })
-  list.value = data.list
-  total.value = data.total
+  const seq = ++loadSeq
+  const data = await getBookPage(buildParams())
+  if (seq !== loadSeq) return
+  list.value = data.list || []
+  total.value = data.total || 0
 }
 
 const doSearch = async () => {
+  appliedKeyword.value = keywordInput.value.trim()
   query.pageNo = 1
   await load()
 }
@@ -162,16 +181,24 @@ const pickCategory = async (id?: number) => {
 }
 
 const onFilterChange = async () => {
+  if (!filtersReady.value) return
   query.pageNo = 1
   await load()
 }
 
 onMounted(async () => {
-  categories.value = await getCategories()
-  campuses.value = await getDict('campus')
-  conditions.value = await getDict('book_condition')
-  notices.value = await getNotices()
+  const [cats, campusDict, conditionDict, noticeList] = await Promise.all([
+    getCategories(),
+    getDict('campus'),
+    getDict('book_condition'),
+    getNotices()
+  ])
+  categories.value = cats || []
+  campuses.value = campusDict || []
+  conditions.value = conditionDict || []
+  notices.value = noticeList || []
   await load()
+  filtersReady.value = true
 })
 </script>
 <style scoped>
