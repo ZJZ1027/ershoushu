@@ -13,7 +13,13 @@
             :class="{ active: currentId === item.id }"
             @click="open(item.id)"
           >
-            <div class="msg-avatar" :style="avatarStyle(item.peerNickname, item.peerAvatar, item.systemNotice)">
+            <div
+              class="msg-avatar"
+              :class="{ clickable: !!item.peerAvatar }"
+              :style="avatarStyle(item.peerNickname, item.peerAvatar, item.systemNotice)"
+              :title="item.peerAvatar ? '查看头像' : undefined"
+              @click.stop="previewPeer(item)"
+            >
               <img v-if="item.peerAvatar" :src="fileUrl(item.peerAvatar)" alt="" />
               <span v-else>{{ avatarText(item.peerNickname, item.systemNotice) }}</span>
             </div>
@@ -50,11 +56,14 @@
               <div class="msg-row" :class="{ mine: isMine(m) }">
                 <div
                   class="msg-avatar sm"
+                  :class="{ clickable: !!(isMine(m) ? myAvatar : current.peerAvatar) }"
                   :style="avatarStyle(
                     isMine(m) ? myName : m.senderNickname,
                     isMine(m) ? myAvatar : current.peerAvatar,
                     current.systemNotice && !isMine(m)
                   )"
+                  :title="(isMine(m) ? myAvatar : current.peerAvatar) ? '查看头像' : undefined"
+                  @click="previewChatAvatar(m)"
                 >
                   <img
                     v-if="isMine(m) ? myAvatar : current.peerAvatar"
@@ -120,6 +129,7 @@ import { useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { getInquiries, getMessages, recallInquiryMsg, replyInquiry } from '@/api'
 import { fileUrl } from '@/api/http'
+import { useAvatarPreview } from '@/composables/useAvatarPreview'
 import { useUserStore } from '@/stores/user'
 
 /** 与后端一致：发送后 2 分钟内可撤回 */
@@ -127,6 +137,7 @@ const RECALL_MS = 2 * 60 * 1000
 
 const route = useRoute()
 const user = useUserStore()
+const { open: previewAvatar } = useAvatarPreview()
 const list = ref<any[]>([])
 const messages = ref<any[]>([])
 const currentId = ref<number>()
@@ -143,6 +154,16 @@ const myName = computed(() => user.profile?.nickname || user.profile?.username |
 const myAvatar = computed(() => user.profile?.avatar || '')
 
 const isMine = (m: any) => Number(m.senderId) === myId.value
+
+const previewPeer = (item: any) => {
+  if (item?.peerAvatar) previewAvatar(fileUrl(item.peerAvatar))
+}
+
+const previewChatAvatar = (m: any) => {
+  const url = isMine(m) ? myAvatar.value : current.value?.peerAvatar
+  if (url) previewAvatar(fileUrl(url))
+}
+
 const isRecalled = (m: any) => Number(m.recalled) === 1
 const canRecall = (m: any) => {
   void nowTick.value
@@ -388,6 +409,12 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   background: #86909c;
+}
+.msg-avatar.clickable {
+  cursor: zoom-in;
+}
+.msg-avatar.clickable:hover {
+  box-shadow: 0 0 0 2px rgba(13, 107, 88, 0.35);
 }
 .msg-avatar img {
   width: 100%;

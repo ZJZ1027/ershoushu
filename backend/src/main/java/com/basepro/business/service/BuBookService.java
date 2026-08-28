@@ -7,6 +7,7 @@ import com.basepro.business.dto.BookAuditReq;
 import com.basepro.business.dto.BookDetailVO;
 import com.basepro.business.dto.BookPublishReq;
 import com.basepro.business.dto.BookQuery;
+import com.basepro.business.dto.BookSuggestVO;
 import com.basepro.business.entity.BuBook;
 import com.basepro.business.entity.BuBookImage;
 import com.basepro.business.entity.BuBookOrder;
@@ -62,6 +63,31 @@ public class BuBookService {
         return PageResult.of(page);
     }
 
+    /** 在售书轻量索引，供搜索框拼音/模糊联想 */
+    public List<BookSuggestVO> suggestIndex() {
+        List<BuBook> books = bookMapper.selectList(Wrappers.<BuBook>lambdaQuery()
+                .in(BuBook::getStatus, BookConstants.BOOK_ON_SALE, BookConstants.BOOK_RESERVED)
+                .orderByDesc(BuBook::getId)
+                .last("LIMIT 300"));
+        if (books.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> sellerIds = books.stream().map(BuBook::getSellerId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, SysUser> sellers = sellerIds.isEmpty() ? Map.of()
+                : userMapper.selectByIds(sellerIds).stream()
+                .collect(Collectors.toMap(SysUser::getId, Function.identity(), (a, b) -> a));
+        return books.stream()
+                .map(book -> {
+                    SysUser seller = sellers.get(book.getSellerId());
+                    return new BookSuggestVO(
+                            book.getId(),
+                            book.getTitle(),
+                            book.getAuthor(),
+                            seller == null ? null : seller.getNickname());
+                })
+                .toList();
+    }
+
     public PageResult<BuBook> myPage(BookQuery query) {
         query.setSellerId(SecurityUtils.getUserId());
         Page<BuBook> page = bookMapper.selectPage(query.toPage(), buildWrapper(query, false));
@@ -107,6 +133,9 @@ public class BuBookService {
             if (!StringUtils.hasText(vo.getSellerNickname())) {
                 vo.setSellerNickname(seller.getNickname());
             }
+            if (!StringUtils.hasText(vo.getSellerAvatar())) {
+                vo.setSellerAvatar(seller.getAvatar());
+            }
         }
         return vo;
     }
@@ -124,13 +153,22 @@ public class BuBookService {
         BookDetailVO vo = new BookDetailVO();
         BeanUtils.copyProperties(book, vo);
         vo.setFavorited(false);
+        SysUser seller = book.getSellerId() == null ? null : userMapper.selectById(book.getSellerId());
+        if (seller != null) {
+            if (!StringUtils.hasText(vo.getSellerNickname())) {
+                vo.setSellerNickname(seller.getNickname());
+            }
+            if (!StringUtils.hasText(vo.getSellerAvatar())) {
+                vo.setSellerAvatar(seller.getAvatar());
+            }
+            vo.setSellerSignature(seller.getSignature());
+        }
         if (loginUser != null) {
             Long count = favoriteMapper.selectCount(Wrappers.<BuFavorite>lambdaQuery()
                     .eq(BuFavorite::getUserId, loginUser.userId())
                     .eq(BuFavorite::getBookId, id));
             vo.setFavorited(count > 0);
             if (canSeeContact(loginUser.userId(), book)) {
-                SysUser seller = userMapper.selectById(book.getSellerId());
                 if (seller != null) {
                     vo.setSellerMobile(seller.getMobile());
                     vo.setSellerWechat(seller.getWechat());
@@ -290,12 +328,35 @@ public class BuBookService {
 
     private com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<BuBook> buildWrapper(
             BookQuery query, boolean publicOnly) {
-        String keyword = StringUtils.hasText(query.getKeyword()) ? query.getKeyword() : query.getTitle();
+        String keyword = StringUtils.hasText(query.getKeyword()) ? query.getKeyword().trim() : query.getTitle();
+        if (StringUtils.hasText(keyword)) {
+            keyword = keyword.trim();
+        }
+        List<Long> sellerIdsByNickname = List.of();
+        if (StringUtils.hasText(keyword)) {
+            sellerIdsByNickname = userMapper.selectList(Wrappers.<SysUser>lambdaQuery()
+                            .like(SysUser::getNickname, keyword)
+                            .select(SysUser::getId))
+                    .stream()
+                    .map(SysUser::getId)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+        final String kw = keyword;
+        final List<Long> matchedSellerIds = sellerIdsByNickname;
         return Wrappers.<BuBook>lambdaQuery()
-                .and(StringUtils.hasText(keyword), w -> w.like(BuBook::getTitle, keyword)
-                        .or().like(BuBook::getAuthor, keyword)
-                        .or().like(BuBook::getIsbn, keyword)
-                        .or().like(BuBook::getCourseName, keyword))
+                .and(StringUtils.hasText(kw), w -> {
+                    w.like(BuBook::getTitle, kw)
+                            .or().like(BuBook::getAuthor, kw)
+                            .or().like(BuBook::getIsbn, kw)
+                            .or().like(BuBook::getCourseName, kw)
+                            .or().like(BuBook::getPublisher, kw)
+                            .or().like(BuBook::getMajorName, kw)
+                            .or().like(BuBook::getDescription, kw);
+                    if (!matchedSellerIds.isEmpty()) {
+                        w.or().in(BuBook::getSellerId, matchedSellerIds);
+                    }
+                })
                 .eq(query.getCategoryId() != null, BuBook::getCategoryId, query.getCategoryId())
                 .eq(query.getStatus() != null, BuBook::getStatus, query.getStatus())
                 .eq(query.getSellerId() != null, BuBook::getSellerId, query.getSellerId())
@@ -331,7 +392,10 @@ public class BuBookService {
                 book.setCategoryName(categoryNames.get(book.getCategoryId()));
             }
             SysUser seller = book.getSellerId() == null ? null : sellers.get(book.getSellerId());
-            book.setSellerNickname(seller == null ? null : seller.getNickname());
+            if (seller != null) {
+                book.setSellerNickname(seller.getNickname());
+                book.setSellerAvatar(seller.getAvatar());
+            }
             book.setImageUrls(images.getOrDefault(book.getId(), List.of()).stream().map(BuBookImage::getUrl).toList());
         }
     }

@@ -69,4 +69,7 @@ public class BuBook extends BaseEntity {
     @TableField(exist = false)
     private String sellerNickname;
 
+    @TableField(exist = false)
+    private String sellerAvatar;
+
 }

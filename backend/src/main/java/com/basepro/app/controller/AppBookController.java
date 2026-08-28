@@ -3,6 +3,7 @@ package com.basepro.app.controller;
 import com.basepro.business.dto.BookPublishReq;
 import com.basepro.business.dto.BookDetailVO;
 import com.basepro.business.dto.BookQuery;
+import com.basepro.business.dto.BookSuggestVO;
 import com.basepro.business.entity.BuBook;
 import com.basepro.business.entity.BuCategory;
 import com.basepro.business.service.BuBookService;
@@ -39,6 +40,11 @@ public class AppBookController {
     @GetMapping("/book/page")
     public R<PageResult<BuBook>> page(@Valid BookQuery query) {
         return R.ok(bookService.publicPage(query));
+    }
+
+    @GetMapping("/book/suggest-index")
+    public R<List<BookSuggestVO>> suggestIndex() {
+        return R.ok(bookService.suggestIndex());
     }
 
     @GetMapping("/book/get")

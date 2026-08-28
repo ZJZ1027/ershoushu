@@ -10,6 +10,8 @@ public class BookDetailVO extends BuBook {
 
     private String sellerWechat;
 
+    private String sellerSignature;
+
     public Boolean getFavorited() {
         return favorited;
     }
@@ -32,6 +34,14 @@ public class BookDetailVO extends BuBook {
 
     public void setSellerWechat(String sellerWechat) {
         this.sellerWechat = sellerWechat;
+    }
+
+    public String getSellerSignature() {
+        return sellerSignature;
+    }
+
+    public void setSellerSignature(String sellerSignature) {
+        this.sellerSignature = sellerSignature;
     }
 
 }

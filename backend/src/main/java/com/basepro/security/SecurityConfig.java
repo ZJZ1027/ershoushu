@@ -57,6 +57,7 @@ public class SecurityConfig {
             "/app-api/auth/refresh-token",
             "/app-api/book/page",
             "/app-api/book/get",
+            "/app-api/book/suggest-index",
             "/app-api/category/list",
             "/app-api/notice/list",
             "/app-api/dict/data",

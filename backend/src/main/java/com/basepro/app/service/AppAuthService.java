@@ -35,6 +35,7 @@ public class AppAuthService {
     private final SysUserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final LoginUserService loginUserService;
+    private final AppFollowService followService;
 
     @Transactional(rollbackFor = Exception.class)
     public TokenVO register(RegisterReq req) {
@@ -80,7 +81,9 @@ public class AppAuthService {
                 user.getAvatarPending(),
                 user.getAvatarAuditStatus() == null ? BookConstants.AVATAR_AUDIT_NONE : user.getAvatarAuditStatus(),
                 user.getAvatarRejectReason(),
-                user.getSex(), user.getCreateTime());
+                user.getSex(), user.getCreateTime(),
+                followService.countFollowers(user.getId()),
+                followService.countFollowing(user.getId()));
     }
 
     public void updateProfile(AppProfileUpdateReq req) {

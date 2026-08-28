@@ -2,19 +2,11 @@
   <div class="page">
     <a-spin :loading="loading" style="width:100%">
       <div v-if="book" class="detail">
-        <div>
-          <img :src="previewUrl" class="cover" alt="" />
-          <div v-if="gallery.length > 1" class="thumbs">
-            <img
-              v-for="(u, i) in gallery"
-              :key="u + '-' + i"
-              :src="fileUrl(u)"
-              :class="{ active: previewSrc === u }"
-              alt=""
-              @click="previewSrc = u"
-            />
-          </div>
-        </div>
+        <BookImageGallery
+          :key="book.id"
+          :cover-url="book.coverUrl"
+          :image-urls="book.imageUrls"
+        />
         <div class="detail-info panel">
           <h1 class="detail-title">{{ book.title }}</h1>
           <p v-if="statusLabel" class="status-tip">{{ statusLabel }}</p>
@@ -26,7 +18,17 @@
           <p class="muted">{{ book.author || '—' }} · {{ book.publisher || '—' }} · ISBN {{ book.isbn || '—' }}</p>
           <p>成色 {{ book.conditionCode || '—' }} · {{ book.campus || '—' }} · {{ book.meetupPlace || '—' }}</p>
           <p>{{ book.description || '暂无描述' }}</p>
-          <p class="muted">卖家 {{ book.sellerNickname || '—' }}</p>
+          <router-link v-if="book.sellerId" :to="'/seller/' + book.sellerId" class="detail-seller">
+            <span class="detail-seller-avatar">
+              <img v-if="sellerAvatarSrc" :src="sellerAvatarSrc" alt="" />
+              <span v-else>{{ sellerLetter }}</span>
+            </span>
+            <span class="detail-seller-meta">
+              <span class="detail-seller-name">卖家 {{ book.sellerNickname || '同学' }}</span>
+              <span class="detail-seller-hint">点击查看 TA 的在售书籍与个人资料</span>
+            </span>
+          </router-link>
+          <p v-else class="muted">卖家 —</p>
           <p v-if="book.sellerWechat || book.sellerMobile">联系：{{ book.sellerWechat || '' }} {{ book.sellerMobile || '' }}</p>
           <p v-else class="muted">卖家确认预约后显示联系方式</p>
           <div v-if="canTrade" class="detail-actions">
@@ -57,6 +59,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import BookImageGallery from '@/components/BookImageGallery.vue'
 import { createReport, getBook, openInquiry, toggleFavorite, wantBook } from '@/api'
 import { fileUrl } from '@/api/http'
 import { useUserStore } from '@/stores/user'
@@ -71,21 +74,6 @@ const showReport = ref(false)
 const openingMsg = ref(false)
 const reportContent = ref('')
 const wantForm = reactive({ meetupPlace: '', remark: '' })
-const previewSrc = ref('')
-const gallery = computed(() => {
-  const urls = [...(book.value?.imageUrls || [])]
-  if (book.value?.coverUrl && !urls.includes(book.value.coverUrl)) {
-    urls.unshift(book.value.coverUrl)
-  }
-  if (!urls.length && book.value?.coverUrl) {
-    urls.push(book.value.coverUrl)
-  }
-  return urls
-})
-const previewUrl = computed(() => {
-  const src = previewSrc.value || gallery.value[0] || book.value?.coverUrl
-  return fileUrl(src) || 'https://placehold.co/600x400?text=Book'
-})
 const canTrade = computed(() => book.value?.status === 1 || book.value?.status === 2)
 const statusLabel = computed(() => {
   const map: Record<number, string> = {
@@ -96,6 +84,11 @@ const statusLabel = computed(() => {
   }
   const s = book.value?.status
   return s == null ? '' : map[s] || ''
+})
+const sellerAvatarSrc = computed(() => fileUrl(book.value?.sellerAvatar))
+const sellerLetter = computed(() => {
+  const name = book.value?.sellerNickname || '同学'
+  return String(name).trim().charAt(0).toUpperCase() || '同'
 })
 
 const needLogin = () => {
@@ -111,7 +104,6 @@ const load = async () => {
   try {
     book.value = await getBook(Number(route.params.id))
     wantForm.meetupPlace = book.value.meetupPlace || ''
-    previewSrc.value = book.value.coverUrl || book.value.imageUrls?.[0] || ''
   } finally {
     loading.value = false
   }
@@ -163,37 +155,14 @@ const submitReport = async () => {
 onMounted(load)
 </script>
 <style scoped>
-.cover {
-  width: 100%;
-  border-radius: var(--radius);
-  background: var(--mist);
-  min-height: 240px;
-  object-fit: cover;
-  border: 1px solid var(--line);
-}
-.thumbs {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-.thumbs img {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 8px;
-  cursor: pointer;
-  border: 2px solid transparent;
-  box-sizing: border-box;
-}
-.thumbs img.active {
-  border-color: var(--teal);
-}
 .detail-title {
   margin: 0 0 8px;
-  font-family: var(--font-brand);
+  font-family: var(--font-body);
   font-size: clamp(1.5rem, 2.4vw, 1.9rem);
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-style: normal;
+  font-variant-numeric: normal;
 }
 .detail-actions {
   display: flex;
@@ -205,5 +174,54 @@ onMounted(load)
   margin: 0 0 8px;
   color: #c46a00;
   font-size: 14px;
+}
+.detail-seller {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.detail-seller:hover {
+  border-color: #b9cfc5;
+  box-shadow: 0 8px 20px rgba(20, 35, 28, 0.06);
+  transform: translateY(-1px);
+}
+.detail-seller-avatar {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--teal-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--teal-deep);
+  font-size: 18px;
+  font-weight: 700;
+}
+.detail-seller-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.detail-seller-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.detail-seller-name {
+  font-weight: 650;
+  color: var(--ink);
+}
+.detail-seller-hint {
+  color: var(--muted);
+  font-size: 12px;
 }
 </style>

@@ -53,7 +53,30 @@
       <a-spin :loading="detailLoading" style="width:100%">
         <div v-if="detail" class="book-detail">
           <div class="book-media">
-            <img class="book-cover" :key="'cover-' + detail.id + '-' + previewSrc" :src="previewUrl" alt="" />
+            <div class="book-cover-shell">
+              <button
+                v-if="gallery.length > 1"
+                type="button"
+                class="book-nav book-nav-prev"
+                aria-label="上一张"
+                @click.stop="shiftGallery(-1)"
+              >
+                ‹
+              </button>
+              <button type="button" class="book-cover-btn" title="点击查看完整图片" @click="openImagePreview()">
+                <img class="book-cover" :key="'cover-' + detail.id + '-' + previewSrc" :src="previewUrl" alt="" />
+                <span class="book-cover-tip">点击查看完整图片</span>
+              </button>
+              <button
+                v-if="gallery.length > 1"
+                type="button"
+                class="book-nav book-nav-next"
+                aria-label="下一张"
+                @click.stop="shiftGallery(1)"
+              >
+                ›
+              </button>
+            </div>
             <div class="book-thumbs">
               <img
                 v-for="(u, i) in gallery"
@@ -62,6 +85,7 @@
                 :class="{ active: previewSrc === u }"
                 alt=""
                 @click="previewSrc = u"
+                @dblclick="openImagePreview(u)"
               />
             </div>
           </div>
@@ -80,10 +104,30 @@
             </p>
             <p v-if="detail.categoryName" class="muted">分类 {{ detail.categoryName }}</p>
             <p>{{ detail.description || '暂无描述' }}</p>
-            <p class="muted">卖家 {{ detail.sellerNickname || '—' }}</p>
-            <p v-if="detail.sellerWechat || detail.sellerMobile">
-              联系：{{ detail.sellerWechat || '' }} {{ detail.sellerMobile || '' }}
-            </p>
+            <button
+              v-if="detail.sellerId"
+              type="button"
+              class="book-seller clickable"
+              @click="openSellerProfile"
+            >
+              <span class="book-seller-avatar">
+                <img v-if="sellerAvatarSrc" :src="sellerAvatarSrc" alt="" />
+                <span v-else>{{ sellerLetter }}</span>
+              </span>
+              <div class="book-seller-meta">
+                <p class="book-seller-name">卖家 {{ detail.sellerNickname || '—' }}</p>
+                <p v-if="detail.sellerWechat || detail.sellerMobile" class="muted">
+                  联系：{{ detail.sellerWechat || '' }} {{ detail.sellerMobile || '' }}
+                </p>
+                <p class="book-seller-hint">点击查看卖家资料</p>
+              </div>
+            </button>
+            <div v-else class="book-seller">
+              <span class="book-seller-avatar">{{ sellerLetter }}</span>
+              <div class="book-seller-meta">
+                <p class="book-seller-name">卖家 —</p>
+              </div>
+            </div>
             <p class="muted">状态 {{ statusText(detail.status) }}</p>
             <p v-if="detail.rejectReason" class="reject-reason">驳回原因：{{ detail.rejectReason }}</p>
             <div class="book-actions">
@@ -110,6 +154,56 @@
       </a-spin>
     </a-modal>
 
+    <Teleport to="body">
+      <div
+        v-if="imagePreviewVisible"
+        class="image-preview-mask"
+        role="dialog"
+        aria-modal="true"
+        aria-label="查看图片"
+        @click="closeImagePreview"
+      >
+        <button type="button" class="image-preview-close" aria-label="关闭" @click.stop="closeImagePreview">×</button>
+        <button
+          v-if="gallery.length > 1"
+          type="button"
+          class="image-nav image-nav-prev"
+          aria-label="上一张"
+          @click.stop="shiftGallery(-1)"
+        >
+          ‹
+        </button>
+        <div class="image-preview-wrap" @click.stop>
+          <img :key="imagePreviewUrl" :src="imagePreviewUrl" alt="" />
+          <span v-if="gallery.length > 1" class="image-counter">
+            {{ previewIndex + 1 }} / {{ gallery.length }}
+          </span>
+        </div>
+        <button
+          v-if="gallery.length > 1"
+          type="button"
+          class="image-nav image-nav-next"
+          aria-label="下一张"
+          @click.stop="shiftGallery(1)"
+        >
+          ›
+        </button>
+      </div>
+    </Teleport>
+
+    <a-modal
+      v-model:visible="sellerProfileVisible"
+      title="卖家资料"
+      :footer="false"
+      width="640px"
+      unmount-on-close
+      @close="closeSellerProfile"
+    >
+      <a-spin :loading="sellerProfileLoading" style="width: 100%">
+        <MemberProfilePanel :member="sellerProfile" />
+      </a-spin>
+    </a-modal>
+
     <a-modal
       v-model:visible="rejectVisible"
       title="驳回原因"
@@ -126,8 +220,9 @@
   </div>
 </template>
 <script lang="ts" setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { auditBook, getBook, getBookPage, offShelfBook } from '@/api/business/book'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import MemberProfilePanel from '@/components/business/MemberProfilePanel.vue'
+import { auditBook, getBook, getBookPage, getMember, offShelfBook } from '@/api/business/book'
 import { useBusinessBadgeStore } from '@/store/modules/businessBadge'
 
 defineOptions({ name: 'BusinessBook' })
@@ -153,6 +248,13 @@ const rejectVisible = ref(false)
 const rejectReason = ref('')
 const rejectId = ref<number>()
 
+const sellerProfileVisible = ref(false)
+const sellerProfileLoading = ref(false)
+const sellerProfile = ref<any>()
+
+const imagePreviewVisible = ref(false)
+const imagePreviewUrl = ref('')
+
 const statusText = (s: number) => ['待审', '在售', '预约中', '已成交', '已下架', '已驳回', '草稿'][s] || String(s)
 
 const fileUrl = (url?: string) => {
@@ -172,6 +274,25 @@ const gallery = computed(() => {
 const previewUrl = computed(() => {
   const src = previewSrc.value || gallery.value[0] || detail.value?.coverUrl
   return fileUrl(src) || 'https://placehold.co/600x400?text=Book'
+})
+
+const previewIndex = computed(() => {
+  const current = previewSrc.value || gallery.value[0]
+  const idx = gallery.value.indexOf(current)
+  return idx >= 0 ? idx : 0
+})
+
+const shiftGallery = (delta: number) => {
+  if (gallery.value.length <= 1) return
+  const next = (previewIndex.value + delta + gallery.value.length) % gallery.value.length
+  previewSrc.value = gallery.value[next]
+  imagePreviewUrl.value = fileUrl(previewSrc.value)
+}
+
+const sellerAvatarSrc = computed(() => fileUrl(detail.value?.sellerAvatar))
+const sellerLetter = computed(() => {
+  const name = detail.value?.sellerNickname || '卖'
+  return String(name).trim().charAt(0).toUpperCase() || '卖'
 })
 
 const getList = async () => {
@@ -209,6 +330,69 @@ const closeDetail = () => {
   detail.value = undefined
   previewSrc.value = ''
   detailLoading.value = false
+  closeSellerProfile()
+  closeImagePreview()
+}
+
+const openImagePreview = (url?: string) => {
+  if (url) {
+    previewSrc.value = url
+  }
+  const raw = previewSrc.value || gallery.value[0] || detail.value?.coverUrl
+  if (!raw) return
+  imagePreviewUrl.value = fileUrl(raw)
+  imagePreviewVisible.value = true
+}
+
+const closeImagePreview = () => {
+  imagePreviewVisible.value = false
+}
+
+const onPreviewKey = (e: KeyboardEvent) => {
+  if (!imagePreviewVisible.value) return
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    shiftGallery(-1)
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    shiftGallery(1)
+  } else if (e.key === 'Escape') {
+    closeImagePreview()
+  }
+}
+
+watch(imagePreviewVisible, (visible) => {
+  if (visible) {
+    window.addEventListener('keydown', onPreviewKey)
+  } else {
+    window.removeEventListener('keydown', onPreviewKey)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onPreviewKey)
+})
+
+const openSellerProfile = async () => {
+  const sellerId = detail.value?.sellerId
+  if (!sellerId) return
+  sellerProfileVisible.value = true
+  sellerProfileLoading.value = true
+  sellerProfile.value = undefined
+  try {
+    sellerProfile.value = await getMember(sellerId)
+  } catch {
+    message.error('无法加载卖家资料')
+    sellerProfileVisible.value = false
+  } finally {
+    sellerProfileLoading.value = false
+  }
+}
+
+const closeSellerProfile = () => {
+  sellerProfileVisible.value = false
+  sellerProfile.value = undefined
+  sellerProfileLoading.value = false
 }
 
 const audit = async (id: number, pass: boolean, reason?: string) => {
@@ -268,13 +452,155 @@ onMounted(getList)
   grid-template-columns: 1.1fr 1fr;
   gap: 20px;
 }
+.book-cover-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.book-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  margin-top: -17px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.book-nav:hover {
+  background: rgba(0, 0, 0, 0.62);
+}
+.book-nav-prev {
+  left: 10px;
+}
+.book-nav-next {
+  right: 10px;
+}
+.book-cover-btn {
+  position: relative;
+  display: block;
+  flex: 1;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.book-cover-btn:hover .book-cover-tip {
+  opacity: 1;
+}
 .book-cover {
   width: 100%;
   min-height: 240px;
   max-height: 360px;
   object-fit: cover;
+  display: block;
   border-radius: 12px;
   background: #f2f3f5;
+}
+.book-cover-tip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.image-preview-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 72px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.image-preview-close {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+.image-preview-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.image-nav {
+  position: fixed;
+  top: 50%;
+  z-index: 3001;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+.image-nav:hover {
+  background: rgba(0, 0, 0, 0.62);
+}
+.image-nav-prev {
+  left: 24px;
+}
+.image-nav-next {
+  right: 24px;
+}
+.image-preview-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: min(920px, 100%);
+  max-height: 86vh;
+}
+.image-preview-wrap img {
+  max-width: min(920px, 100%);
+  max-height: 82vh;
+  object-fit: contain;
+  display: block;
+  background: #fff;
+  border-radius: 8px;
+}
+.image-counter {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 .book-thumbs {
   display: flex;
@@ -312,6 +638,61 @@ onMounted(getList)
   font-weight: 400;
 }
 .muted { color: var(--color-text-3); }
+.book-seller {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-2, #e5e6eb);
+  border-radius: 10px;
+  background: var(--color-fill-1, #f7f8fa);
+  width: 100%;
+  text-align: left;
+}
+.book-seller.clickable {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.book-seller.clickable:hover {
+  border-color: rgb(var(--primary-6, 22 93 255));
+  box-shadow: 0 4px 14px rgba(22, 93, 255, 0.08);
+}
+.book-seller-avatar {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e8f3ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(var(--primary-6, 22 93 255));
+  font-size: 18px;
+  font-weight: 600;
+}
+.book-seller-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.book-seller-meta {
+  min-width: 0;
+}
+.book-seller-name {
+  margin: 0 0 4px;
+  color: var(--color-text-1);
+  font-weight: 500;
+}
+.book-seller-meta .muted {
+  margin: 0;
+}
+.book-seller-hint {
+  margin: 4px 0 0;
+  color: rgb(var(--primary-6, 22 93 255));
+  font-size: 12px;
+}
 .reject-reason { color: #f53f3f; }
 .book-actions {
   display: flex;

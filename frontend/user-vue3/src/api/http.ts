@@ -15,6 +15,7 @@ const PUBLIC_PATHS = [
   '/auth/refresh-token',
   '/book/page',
   '/book/get',
+  '/book/suggest-index',
   '/category/list',
   '/notice/list',
   '/dict/data'

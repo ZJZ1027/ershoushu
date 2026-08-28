@@ -23,10 +23,15 @@
         <router-link to="/mine">我的</router-link>
         <template v-if="user.token && user.profile">
           <div class="nav-user">
-            <span class="nav-avatar" aria-hidden="true">
+            <button
+              type="button"
+              class="nav-avatar clickable"
+              title="个人中心"
+              @click="onNavAvatarClick"
+            >
               <img v-if="navAvatar" :src="navAvatar" alt="" />
               <span v-else>{{ navLetter }}</span>
-            </span>
+            </button>
             <span class="nav-user-name">{{ user.profile.nickname || user.profile.username }}</span>
             <button type="button" class="nav-logout" @click="onLogout">退出</button>
           </div>
@@ -38,11 +43,13 @@
       </nav>
     </header>
     <router-view />
+    <AvatarPreview />
   </div>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import AvatarPreview from '@/components/AvatarPreview.vue'
 import { fileUrl } from '@/api/http'
 import { useUserStore } from '@/stores/user'
 
@@ -56,6 +63,9 @@ const navLetter = computed(() => {
   return String(name).trim().charAt(0).toUpperCase() || '我'
 })
 
+const onNavAvatarClick = () => {
+  router.push('/mine')
+}
 onMounted(async () => {
   if (!user.token) return
   try {

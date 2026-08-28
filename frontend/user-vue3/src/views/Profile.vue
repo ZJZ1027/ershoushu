@@ -6,7 +6,13 @@
       <a-form :model="form" layout="vertical" @submit-success="save">
         <a-form-item label="头像">
           <div class="avatar-row">
-            <button type="button" class="avatar-btn" :disabled="uploading || auditStatus === 1" @click="pickAvatar">
+            <button
+              type="button"
+              class="avatar-btn"
+              :disabled="uploading"
+              :title="avatarPreview ? '点击查看头像' : undefined"
+              @click="onAvatarBtnClick"
+            >
               <img v-if="avatarPreview" :src="avatarPreview" alt="头像" />
               <span v-else class="avatar-fallback">{{ avatarLetter }}</span>
               <span class="avatar-mask">{{ avatarMaskText }}</span>
@@ -17,10 +23,16 @@
               <p v-else-if="auditStatus === 2" class="status rejected">
                 上次头像未通过审核{{ rejectReason ? '：' + rejectReason : '' }}
               </p>
-              <p class="muted">支持 JPG / PNG，建议正方形，不超过 5MB</p>
+              <p class="muted">支持 JPG / PNG，选图后可截取方形区域。有头像时可点击查看大图。</p>
               <div v-if="pendingPreview" class="pending-box">
                 <span class="muted">待审预览</span>
-                <img :src="pendingPreview" alt="待审头像" />
+                <img
+                  class="pending-clickable"
+                  :src="pendingPreview"
+                  alt="待审头像"
+                  title="查看待审头像"
+                  @click="previewAvatar(pendingPreview)"
+                />
               </div>
               <a-button size="small" :loading="uploading" :disabled="auditStatus === 1" @click="pickAvatar">
                 {{ auditStatus === 1 ? '审核中' : '选择图片' }}
@@ -51,16 +63,26 @@
         <a-button html-type="submit" type="primary" :loading="saving">保存</a-button>
       </a-form>
     </div>
+
+    <AvatarCropModal
+      v-model:visible="cropVisible"
+      :image-src="cropSrc"
+      @confirm="onCropConfirm"
+      @cancel="onCropCancel"
+    />
   </div>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import AvatarCropModal from '@/components/AvatarCropModal.vue'
 import { updateProfile, uploadFile } from '@/api'
 import { fileUrl } from '@/api/http'
+import { useAvatarPreview } from '@/composables/useAvatarPreview'
 import { useUserStore } from '@/stores/user'
 
 const user = useUserStore()
+const { open: previewAvatar } = useAvatarPreview()
 const fileInput = ref<HTMLInputElement>()
 const uploading = ref(false)
 const saving = ref(false)
@@ -68,6 +90,8 @@ const auditStatus = ref(0)
 const rejectReason = ref('')
 const pendingAvatar = ref('')
 const draftAvatar = ref('')
+const cropVisible = ref(false)
+const cropSrc = ref('')
 const form = reactive({
   nickname: '',
   signature: '',
@@ -86,8 +110,17 @@ const avatarLetter = computed(() => {
 const avatarMaskText = computed(() => {
   if (uploading.value) return '上传中'
   if (auditStatus.value === 1) return '审核中'
+  if (avatarPreview.value) return '查看'
   return '更换'
 })
+
+const onAvatarBtnClick = () => {
+  if (avatarPreview.value) {
+    previewAvatar(avatarPreview.value)
+    return
+  }
+  pickAvatar()
+}
 
 const fillFromProfile = () => {
   const p = user.profile || {}
@@ -116,28 +149,48 @@ const pickAvatar = () => {
   fileInput.value?.click()
 }
 
-const onAvatarChange = async (e: Event) => {
+const revokeCropSrc = () => {
+  if (cropSrc.value.startsWith('blob:')) {
+    URL.revokeObjectURL(cropSrc.value)
+  }
+  cropSrc.value = ''
+}
+
+const onAvatarChange = (e: Event) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
+  input.value = ''
   if (!file) return
   if (!file.type.startsWith('image/')) {
     Message.warning('请选择图片文件')
-    input.value = ''
     return
   }
-  if (file.size > 5 * 1024 * 1024) {
-    Message.warning('图片请控制在 5MB 以内')
-    input.value = ''
+  if (file.size > 8 * 1024 * 1024) {
+    Message.warning('原图请控制在 8MB 以内')
     return
   }
+  revokeCropSrc()
+  cropSrc.value = URL.createObjectURL(file)
+  cropVisible.value = true
+}
+
+const onCropCancel = () => {
+  cropVisible.value = false
+  revokeCropSrc()
+}
+
+const onCropConfirm = async (file: File) => {
+  cropVisible.value = false
+  revokeCropSrc()
   uploading.value = true
   try {
     const url = await uploadFile(file)
     draftAvatar.value = String(url || '')
-    Message.success('图片已选好，点击保存提交审核')
+    Message.success('头像已裁剪，点击保存提交审核')
+  } catch {
+    /* axios 已提示 */
   } finally {
     uploading.value = false
-    input.value = ''
   }
 }
 
@@ -185,6 +238,10 @@ const save = async () => {
   font-family: var(--font-brand);
   font-size: 1.8rem;
   font-weight: 700;
+}
+
+.avatar-btn:not(:disabled) {
+  cursor: zoom-in;
 }
 
 .avatar-btn:disabled {
@@ -249,6 +306,10 @@ const save = async () => {
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--line);
+}
+
+.pending-box img.pending-clickable {
+  cursor: zoom-in;
 }
 
 .file-hidden {

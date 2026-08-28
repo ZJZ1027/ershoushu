@@ -2,24 +2,40 @@
   <div class="home">
     <section class="search-hero">
       <div class="search-hero-inner">
-        <form class="search-bar" @submit.prevent="doSearch">
-          <input
-            v-model="keywordInput"
-            class="search-input"
-            type="search"
-            enterkeyhint="search"
-            placeholder="搜书名 / 作者 / ISBN / 课程"
-            autocomplete="off"
-            @keydown.enter.prevent="doSearch"
-          />
-          <button class="search-btn" type="submit">
-            <svg class="search-ico" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2" />
-              <path d="M16.5 16.5L21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
-            </svg>
-            搜索
-          </button>
-        </form>
+        <div class="search-wrap" @focusin="onSearchFocus" @focusout="onSearchBlur">
+          <form class="search-bar" @submit.prevent="doSearch">
+            <input
+              v-model="keywordInput"
+              class="search-input"
+              type="search"
+              enterkeyhint="search"
+              placeholder="搜书名 / 作者 / 卖家，支持拼音如 xiyou"
+              autocomplete="off"
+              @input="onKeywordInput"
+              @keydown="onSearchKeydown"
+            />
+            <button class="search-btn" type="submit">
+              <svg class="search-ico" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2" />
+                <path d="M16.5 16.5L21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+              </svg>
+              搜索
+            </button>
+          </form>
+          <ul v-if="showSuggest && suggestions.length" class="search-suggest" role="listbox">
+            <li
+              v-for="(item, idx) in suggestions"
+              :key="item.id + '-' + item.text"
+              class="search-suggest-item"
+              :class="{ active: idx === activeSuggest }"
+              role="option"
+              @mousedown.prevent="pickSuggest(item)"
+            >
+              <span class="suggest-text">{{ item.text }}</span>
+              <span v-if="item.hint" class="suggest-hint">{{ item.hint }}</span>
+            </li>
+          </ul>
+        </div>
         <div class="search-cats" role="list">
           <button
             type="button"
@@ -81,16 +97,12 @@
       </div>
 
       <div class="grid">
-        <router-link v-for="b in list" :key="b.id" class="card-book" :to="'/book/' + b.id">
-          <div class="card-cover">
-            <img :src="cover(b)" alt="" />
-          </div>
-          <div class="card-body">
-            <h3 class="card-title">{{ b.title }}</h3>
-            <div class="price">¥{{ b.price }}</div>
-            <div class="muted">{{ b.campus || '校内面交' }} · {{ b.sellerNickname }}</div>
-          </div>
-        </router-link>
+        <BookGridCard
+          v-for="b in list"
+          :key="b.id"
+          :book="b"
+          :condition-label="conditionLabel"
+        />
       </div>
 
       <div v-if="!list.length" class="empty-state">暂无在售书籍，换个关键词或分类试试</div>
@@ -107,9 +119,23 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { getBookPage, getCategories, getDict, getNotices } from '@/api'
-import { fileUrl } from '@/api/http'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import PinyinMatch from 'pinyin-match'
+import BookGridCard from '@/components/BookGridCard.vue'
+import { getBookPage, getBookSuggestIndex, getCategories, getDict, getNotices } from '@/api'
+
+type SuggestIndexItem = {
+  id: number
+  title: string
+  author?: string
+  sellerNickname?: string
+}
+
+type SuggestItem = {
+  id: number
+  text: string
+  hint?: string
+}
 
 /** 输入框草稿：仅点搜索后才写入 appliedKeyword 并刷新列表 */
 const keywordInput = ref('')
@@ -118,7 +144,7 @@ const appliedKeyword = ref('')
 
 const query = reactive({
   pageNo: 1,
-  pageSize: 12,
+  pageSize: 10,
   categoryId: undefined as number | undefined,
   campus: undefined as string | undefined,
   conditionCode: undefined as string | undefined
@@ -133,7 +159,17 @@ const notices = ref<any[]>([])
 let loadSeq = 0
 const filtersReady = ref(false)
 
-const cover = (b: any) => fileUrl(b.coverUrl) || 'https://placehold.co/400x300?text=Book'
+const suggestIndex = ref<SuggestIndexItem[]>([])
+const suggestions = ref<SuggestItem[]>([])
+const showSuggest = ref(false)
+const activeSuggest = ref(-1)
+let suggestTimer: ReturnType<typeof setTimeout> | undefined
+let blurTimer: ReturnType<typeof setTimeout> | undefined
+
+const conditionLabel = (code?: string) => {
+  if (!code) return ''
+  return conditions.value.find((d) => d.value === code)?.label || ''
+}
 
 const activeCategoryName = computed(() => {
   if (query.categoryId == null) return ''
@@ -168,10 +204,139 @@ const load = async () => {
   total.value = data.total || 0
 }
 
+const matchText = (text: string | undefined, kw: string) => {
+  if (!text) return false
+  const raw = String(text)
+  if (raw.toLowerCase().includes(kw.toLowerCase())) return true
+  try {
+    return !!PinyinMatch.match(raw, kw)
+  } catch {
+    return false
+  }
+}
+
+const collectSuggestions = (kw: string): SuggestItem[] => {
+  if (!kw) return []
+  const seen = new Set<string>()
+  const result: SuggestItem[] = []
+  for (const item of suggestIndex.value) {
+    if (matchText(item.title, kw)) {
+      const key = 't:' + item.title
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({
+          id: item.id,
+          text: item.title,
+          hint: item.author || item.sellerNickname || undefined
+        })
+      }
+    } else if (matchText(item.author, kw)) {
+      const key = 'a:' + item.author
+      if (!seen.has(key) && item.author) {
+        seen.add(key)
+        result.push({
+          id: item.id,
+          text: item.author,
+          hint: item.title
+        })
+      }
+    } else if (matchText(item.sellerNickname, kw)) {
+      const key = 's:' + item.sellerNickname
+      if (!seen.has(key) && item.sellerNickname) {
+        seen.add(key)
+        result.push({
+          id: item.id,
+          text: item.sellerNickname,
+          hint: item.title
+        })
+      }
+    }
+    if (result.length >= 8) break
+  }
+  return result
+}
+
+const refreshSuggestions = () => {
+  const kw = keywordInput.value.trim()
+  suggestions.value = collectSuggestions(kw)
+  activeSuggest.value = suggestions.value.length ? 0 : -1
+  showSuggest.value = suggestions.value.length > 0
+}
+
+const onKeywordInput = () => {
+  if (suggestTimer) clearTimeout(suggestTimer)
+  suggestTimer = setTimeout(refreshSuggestions, 100)
+}
+
+const onSearchFocus = () => {
+  if (blurTimer) clearTimeout(blurTimer)
+  refreshSuggestions()
+}
+
+const onSearchBlur = () => {
+  blurTimer = setTimeout(() => {
+    showSuggest.value = false
+    activeSuggest.value = -1
+  }, 120)
+}
+
+const pickSuggest = async (item: SuggestItem) => {
+  keywordInput.value = item.text
+  showSuggest.value = false
+  activeSuggest.value = -1
+  await doSearch()
+}
+
+const resolveKeywordForSearch = () => {
+  const kw = keywordInput.value.trim()
+  if (!kw) return ''
+  // 纯英文/数字输入时，优先用拼音命中的中文词，避免直接搜字母得到 0 结果
+  if (/^[a-zA-Z0-9\s'.-]+$/.test(kw)) {
+    const hits = suggestions.value.length ? suggestions.value : collectSuggestions(kw)
+    if (hits.length) {
+      keywordInput.value = hits[0].text
+      return hits[0].text
+    }
+  }
+  return kw
+}
+
 const doSearch = async () => {
-  appliedKeyword.value = keywordInput.value.trim()
+  showSuggest.value = false
+  appliedKeyword.value = resolveKeywordForSearch()
   query.pageNo = 1
   await load()
+}
+
+const onSearchKeydown = async (e: KeyboardEvent) => {
+  if (e.key === 'ArrowDown') {
+    if (!suggestions.value.length) return
+    e.preventDefault()
+    showSuggest.value = true
+    activeSuggest.value = (activeSuggest.value + 1) % suggestions.value.length
+    return
+  }
+  if (e.key === 'ArrowUp') {
+    if (!suggestions.value.length) return
+    e.preventDefault()
+    showSuggest.value = true
+    activeSuggest.value =
+      activeSuggest.value <= 0 ? suggestions.value.length - 1 : activeSuggest.value - 1
+    return
+  }
+  if (e.key === 'Escape') {
+    showSuggest.value = false
+    activeSuggest.value = -1
+    return
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    if (showSuggest.value && activeSuggest.value >= 0 && suggestions.value[activeSuggest.value]) {
+      await pickSuggest(suggestions.value[activeSuggest.value])
+      return
+    }
+    await doSearch()
+  }
 }
 
 const pickCategory = async (id?: number) => {
@@ -187,18 +352,25 @@ const onFilterChange = async () => {
 }
 
 onMounted(async () => {
-  const [cats, campusDict, conditionDict, noticeList] = await Promise.all([
+  const [cats, campusDict, conditionDict, noticeList, index] = await Promise.all([
     getCategories(),
     getDict('campus'),
     getDict('book_condition'),
-    getNotices()
+    getNotices(),
+    getBookSuggestIndex().catch(() => [])
   ])
   categories.value = cats || []
   campuses.value = campusDict || []
   conditions.value = conditionDict || []
   notices.value = noticeList || []
+  suggestIndex.value = Array.isArray(index) ? index : []
   await load()
   filtersReady.value = true
+})
+
+onUnmounted(() => {
+  if (suggestTimer) clearTimeout(suggestTimer)
+  if (blurTimer) clearTimeout(blurTimer)
 })
 </script>
 <style scoped>
@@ -215,6 +387,11 @@ onMounted(async () => {
 .search-hero-inner {
   max-width: var(--page-max);
   margin: 0 auto;
+}
+
+.search-wrap {
+  position: relative;
+  z-index: 5;
 }
 
 .search-bar {
@@ -278,6 +455,56 @@ onMounted(async () => {
 .search-ico {
   width: 16px;
   height: 16px;
+}
+
+.search-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(20, 35, 28, 0.16);
+  border: 1px solid rgba(213, 224, 217, 0.95);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.search-suggest-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.search-suggest-item:hover,
+.search-suggest-item.active {
+  background: rgba(13, 107, 88, 0.08);
+}
+
+.suggest-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.suggest-hint {
+  flex: none;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .search-cats {
@@ -380,10 +607,6 @@ onMounted(async () => {
 
 .home-publish:hover {
   background: var(--teal-deep);
-}
-
-.card-cover {
-  overflow: hidden;
 }
 
 .home-pager {

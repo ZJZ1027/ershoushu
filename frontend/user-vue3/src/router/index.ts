@@ -10,6 +10,8 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', meta: { auth: true }, component: () => import('@/views/Home.vue') },
         { path: 'book/:id', name: 'detail', meta: { auth: true }, component: () => import('@/views/Detail.vue') },
+        { path: 'seller/:id', name: 'seller', meta: { auth: true }, component: () => import('@/views/SellerProfile.vue') },
+        { path: 'social/:type(followers|following)/:userId?', name: 'social', meta: { auth: true }, component: () => import('@/views/FollowList.vue') },
         { path: 'publish', name: 'publish', meta: { auth: true }, component: () => import('@/views/Publish.vue') },
         { path: 'mine', name: 'mine', meta: { auth: true }, component: () => import('@/views/Mine.vue') },
         { path: 'messages', name: 'messages', meta: { auth: true }, component: () => import('@/views/Messages.vue') },

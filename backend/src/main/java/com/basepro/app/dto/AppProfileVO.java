@@ -14,5 +14,7 @@ public record AppProfileVO(Long id,
                            Integer avatarAuditStatus,
                            String avatarRejectReason,
                            Integer sex,
-                           LocalDateTime createTime) {
+                           LocalDateTime createTime,
+                           Long followerCount,
+                           Long followingCount) {
 }
